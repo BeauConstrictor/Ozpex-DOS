@@ -1,6 +1,7 @@
   .org $c003
 
 DELETE    = $7f
+CLEAR     = $11
 
 ; ---------- ;
 ; memory map ;
@@ -26,6 +27,12 @@ reset:
   ; start on disk A
   lda #00
   sta disk
+
+  lda #welcome_msg
+  sta PRINT
+  lda #>welcome_msg
+  sta PRINT+1
+  jsr print
 
 mainloop:
   jsr run_command
@@ -55,7 +62,7 @@ _get_sector_not_disk_a:
   sta addr+1                 ; ^
   rts                        ; return
 
-; output the address of a certain sector (from A) on the current disk into addr
+; return the address of a certain sector (from A) on the current disk into addr
 ; expects: addr to hold the address of the current disk
 ; modifies: a
 get_sector:
@@ -180,12 +187,14 @@ _get_line_backspace_ignore:
 ; modifies: a, x, y
 expect_key:
   ldx input_ptr
-  inc input_ptr ; move the buf ptr to the next char for the next call to get_Key
-  lda input_buf,x ; read the key from the buf
-  beq bad_handler ; if the input buffer is exhausted, throw error
-  cmp #" "     ; if space was pressed,
-  beq expect_key  ; skip the key.
+  inc input_ptr        ; move the buf ptr to the next char for the next call to get_Key
+  lda input_buf,x      ; read the key from the buf
+  beq _expect_key_fail ; if the input buffer is exhausted, throw error
+  cmp #" "             ; if space was pressed,
+  beq expect_key       ; skip the key.
   rts
+_expect_key_fail:
+  jmp bad_handler
 
 ; 1. match the xth element in the opcode table with the input buffer
 ; 2. if it matches, call the opcode handler
@@ -238,6 +247,8 @@ _dispatch_miss_1:
 cmd_map:
   .byte "lst"
   .word  lst
+  .byte "usg"
+  .word  usg
 
 ; list the files in the current disk out to the serial port
 ; expects: addr to hold the address of the current disk
@@ -257,6 +268,37 @@ _list_didnt_carry:
   bne _list_loop
   rts
 
+usg:
+  lda #02           ; go to sector two (usage info)
+  jsr get_sector    ; ^
+  ldx #00           ; start disk usage at zero
+  ldy #00           ; start reading usage info for sector 0
+_usg_loop:
+  lda (addr),y      ; check the usage for the sector
+  beq _usg_not_used ; if the sector is not used, don't count it
+  inx               ; if its used, count it
+_usg_not_used:
+  iny               ; move to the next sector
+  cpy #32           ; check if we have read all the sectors
+  bne _usg_loop     ; loop again
+  txa
+  jsr hex_byte      ; print the usage info
+  stx SERIAL
+  sty SERIAL
+  lda #"/"          ; show that it is out of $20 (32 decimal)
+  sta SERIAL
+  lda #"2"
+  sta SERIAL
+  lda #"0"
+  sta SERIAL
+  lda #"\n"
+  sta SERIAL
+  rts
+
+; ---------------- ;
+; misc subroutines ;
+; ---------------- ;
+
 ; return (in a) the a register as hex
 ; modifies: a (duh)
 hex_nibble:
@@ -267,6 +309,25 @@ hex_nibble:
   rts
 _hex_nibble_digit:
   adc #"0"
+  rts
+
+; return (in x & y) the a register as hex
+; modifies: x, y, a
+hex_byte:
+  pha ; save the full value for later
+  ; get just the MSN
+  lsr
+  lsr
+  lsr
+  lsr
+  jsr hex_nibble
+  tax ; but the hex char for the MSN in x
+
+  pla ; bring back the full value
+  and #$0f ; get just the LSN
+  jsr hex_nibble
+  tay ; but the hex char for the LSN in y
+
   rts
 
 ; write the address of a null-terminated string to PRINT
@@ -303,6 +364,12 @@ err_msg:
   .byte "\n"
   .byte ">:("
   .byte "\n"
+  .byte 0
+
+welcome_msg:
+  .byte CLEAR
+  .byte "**** Ozpex DOS v0.1.0 ****\n"
+  .byte "Disk A ready.\n\n"
   .byte 0
 
   .org $fffc

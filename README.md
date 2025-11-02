@@ -20,6 +20,8 @@ Sector 2 contains free sector information. As sectors are allocated to files, th
 
 Files are structured as linked lists of sectors, so as a file's content grows, it eventually cannot fit anymore in a single sector. The final byte of a sector determines how to file spans multiple sectors. If bit 7 (the MSB) is set, this sector contains the end of the file and if not, read bit 0-4 to find the index of the next sector to visit.
 
+For a simple reference implementation, see `fs.py`. This script generates a template filesystem for testing with the DOS.
+
 ## Commands
 
 There is no PATH variables or environment variables of any kind in this OS, so all these commands are builtin.

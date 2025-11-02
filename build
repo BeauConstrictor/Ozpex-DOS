@@ -1,1 +1,1 @@
-vasm -dotdir -Fbin filesystem.asm -o rom.bin -esc
+vasm -dotdir -Fbin dos.asm -o rom.bin -esc
