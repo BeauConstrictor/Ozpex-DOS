@@ -1,0 +1,6 @@
+set -e
+
+./build
+cd ../ozpex-64
+python ../ozpex-64/main.py -1 bbram:o64dos-fs --rom ../o64-dos/rom.bin
+cd -

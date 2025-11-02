@@ -16,7 +16,7 @@ The filesystem is flat, so there is no directory structure. Just two volumes (on
 * 32 for each file, all nulls for a file that has not been created.
 ```
 
-Sector 2 contains free sector information. As sectors as allocated to files, that sector's byte has `$ff` written to it, and when it is unallocated again, it's byte has `$00` written to it. Most of this sector is unused, and may be useful for future improvements like disk names, 
+Sector 2 contains free sector information. As sectors are allocated to files, that sector's byte has `$ff` written to it, and when it is unallocated again, it's byte has `$00` written to it. Most of this sector is unused, and may be useful for future improvements like disk names. The final bytes of this sector should contain `$deadbeef`, and this is used to verify that the disk is formatted correctly with the filesystem.
 
 Files are structured as linked lists of sectors, so as a file's content grows, it eventually cannot fit anymore in a single sector. The final byte of a sector determines how to file spans multiple sectors. If bit 7 (the MSB) is set, this sector contains the end of the file and if not, read bit 0-4 to find the index of the next sector to visit.
 
@@ -33,5 +33,5 @@ DEL: delete a file.
 CPY: copy a file to another name.
 CLS: clear the screen.
 HLP: output help with commands.
-DUS: output disk usage between $03 & $20
+USG: output disk usage between $03 & $20
 ```
