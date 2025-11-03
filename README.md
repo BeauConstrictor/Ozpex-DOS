@@ -4,6 +4,10 @@ The Ozpex 64 is an experimental disk-operating-system for the [Ozpex 64](https:/
 
 Currently, this README serves mainly as a design doc, and not an introduction to the project.
 
+## Guide
+
+Once you are in the command line, you can use `lst` to see the files on the current drive. This command will output a number along with each file, which represents where that file starts on disk. Most commands that take a file actually take this number instead of a filepath, as it is much faster to read or write a file from. This value is known as the *sector ID*.
+
 ## Filesystem
 
 The filesystem is flat, so there is no directory structure. Just two volumes (one for each cartridge slot - the os itself goes in ROM). Each volume contains 32 256-byte sectors/pages. Sectors 0 & 1 contain the lookup table for filenames. The format is like this:

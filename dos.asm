@@ -323,6 +323,10 @@ cmd_map:
   .word  cat
   .byte "exe"
   .word  exe
+  .byte "hlp"
+  .word  hlp
+  .byte "cls"
+  .word  cls
 
 ; list the files in the current disk out to the serial port
 ; expects: addr to hold the address of the current disk
@@ -424,6 +428,29 @@ exe:
 _exe_subroutine:
   jmp $0400
 
+hlp:
+  lda #hlp_msg
+  sta PRINT
+  lda #>hlp_msg
+  sta PRINT+1
+  jsr print
+  lda #hlp_msg_2
+  sta PRINT
+  lda #>hlp_msg_2
+  sta PRINT+1
+  jsr print
+  lda #hlp_msg_3
+  sta PRINT
+  lda #>hlp_msg_3
+  sta PRINT+1
+  jsr print
+  rts
+
+cls:
+  lda #$11
+  sta SERIAL
+  rts
+
 ; ---------------- ;
 ; misc subroutines ;
 ; ---------------- ;
@@ -519,6 +546,32 @@ bad_handler:
 ; messages ;
 ; -------- ;
 
+; NOTE to self, remember to change to version numbers!
+
+welcome_msg:
+  .byte CLEAR
+  .byte "**** Ozpex DOS v0.2.0 ****\n"
+  .byte "Disk A ready.\n\n"
+
+  .byte "Type 'hlp' for help.\n\n"
+  .byte 0
+
+hlp_msg:
+  .byte "Ozpex DOS Commands:\n"
+  .byte "These commands are included in ROM.\n\n"
+  .byte "lst: List all files on the disk\n"
+  .byte "dsk: Switch between Disk A, B and T.\n", 0
+hlp_msg_2: 
+  .byte "exe: Execute an *.img program.\n"
+  .byte "cat: Output the contents of a text file.\n"
+  .byte "del: Delete a file.\n"
+  .byte "cpy: Copy a file to another name.\n", 0
+hlp_msg_3:
+  .byte "cls: Clear the screen.\n"
+  .byte "hlp: Display this help message.\n"
+  .byte "usg: Check disk usage info.\n", 0
+
+
 err_msg:
   .byte "\n"
   .byte ">:("
@@ -535,12 +588,6 @@ delimiter:
 
 loading_file:
   .byte "Loading file..."
-  .byte 0
-
-welcome_msg:
-  .byte CLEAR
-  .byte "**** Ozpex DOS v0.1.0 ****\n"
-  .byte "Disk A ready.\n\n"
   .byte 0
 
   .org $fff8
