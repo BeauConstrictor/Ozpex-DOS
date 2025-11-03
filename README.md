@@ -2,11 +2,27 @@
 
 The Ozpex 64 is an experimental disk-operating-system for the [Ozpex 64](https://github.com/BeauConstrictor/Ozpex-64) fictional 8-bit computer.
 
+This project is very much not ready to be used, and development is still in early stages.
+
 Currently, this README serves mainly as a design doc, and not an introduction to the project.
 
 ## Guide
 
 Once you are in the command line, you can use `lst` to see the files on the current drive. This command will output a number along with each file, which represents where that file starts on disk. Most commands that take a file actually take this number instead of a filepath, as it is much faster to read or write a file from. This value is known as the *sector ID*.
+
+Most commands are not yet implemented, and there is currently:
+
+[*] `lst`
+[ ] `dsk`
+[*] `exe`
+[*] `cat`
+[ ] `del`
+[ ] `cpy`
+[*] `cls`
+[*] `hlp`
+[*] `usg`
+
+Use the `hlp` to see what each of these commands actually does.
 
 ## Filesystem
 
@@ -25,19 +41,3 @@ Sector 2 contains free sector information. As sectors are allocated to files, th
 Files are structured as linked lists of sectors, so as a file's content grows, it eventually cannot fit anymore in a single sector. The final byte of a sector determines how to file spans multiple sectors. If bit 7 (the MSB) is set, this sector contains the end of the file and if not, read bit 0-4 to find the index of the next sector to visit.
 
 For a simple reference implementation, see `fs.py`. This script generates a template filesystem for testing with the DOS.
-
-## Commands
-
-There is no PATH variables or environment variables of any kind in this OS, so all these commands are builtin.
-
-```
-LST: list all the files on disk.
-DSK: move between disk A and B.
-EXE: copy a file to ram and jump to it as a subroutine.
-CAT: output the text content of a file.
-DEL: delete a file.
-CPY: copy a file to another name.
-CLS: clear the screen.
-HLP: output help with commands.
-USG: output disk usage between $03 & $20
-```
