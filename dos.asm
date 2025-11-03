@@ -6,9 +6,10 @@ CLEAR     = $11
 ; ---------- ;
 ; memory map ;
 ; ---------- ;
-SERIAL = $8002
-DISKA  = $8003
-DISKB  = $a003
+SERIAL   = $8002
+DISKA    = $8003
+DISKB    = $a003
+FILELOAD = $0400
 
 ; ----------------- ;
 ; memory allocation ;
@@ -19,9 +20,10 @@ byte         =   $03  ;   1 B;  general purpose byte for subroutines
 PRINT        =   $04  ;   2 B 
 cmd_handler  =   $08  ;   2 B
 cmd_buf      =   $10  ;   2 B
+fileop_ptr   =   $12  ;   2 B;  pointer used for file reads and writes
+BYTE_BUILD   =   $14  ;   2 B;  used when reading in hex bytes
 input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
-prgload      = $5fff  ; 8 KiB;  right up to the end of RAM
 
 reset:
   ; start on disk A
@@ -97,9 +99,79 @@ _print_file_loop_ext:
   iny
   cpy #15
   bne _print_file_loop_ext
+
+  lda #delimiter
+  sta PRINT
+  lda #>delimiter
+  sta PRINT+1
+  jsr print
+
+  ; print the sector id
+  tya
+  pha
+  txa
+  pha
+  lda (addr),y
+  jsr hex_byte
+  stx SERIAL
+  sty SERIAL
+  pla
+  tax
+  pla
+  tay
+
   lda #"\n"
   sta SERIAL
 _print_file_done:
+  rts
+
+; increment the fileop_ptr and addr ptr
+; modifies: 
+inc_fop_addr:
+  inc fileop_ptr
+  bne _inc_fop_addr_no_carry_fop
+  inc fileop_ptr+1
+_inc_fop_addr_no_carry_fop:
+  inc addr
+  bne _inc_fop_addr_no_carry_addr
+  inc addr+1
+_inc_fop_addr_no_carry_addr:
+  rts
+
+; take a sector id for the start of a file in a, and the location to write
+; the readout to in fileop_ptr. returns the contents starting at fileop_ptr,
+; and leaves fileop_ptr as addr of the last byte of the file.
+; expects: addr to hold the address of the current disk
+; modifies: a, x, y
+read_file:
+  jsr get_sector
+  ldy #0
+  ldx #255
+_read_file_loop:
+
+  ; copy over a single byte
+  lda (addr),y
+  sta (fileop_ptr),y
+
+  ; point to the next byte
+  jsr inc_fop_addr
+
+  ; loop again
+  dex
+  bne _read_file_loop
+
+  ; parse the final linked list byte
+  lda (addr),y
+  sta (fileop_ptr),y
+  asl
+  bcs _read_file_done
+  lsr
+  jmp read_file
+
+  ; increment
+  jsr inc_fop_addr
+
+_read_file_done:
   rts
 
 ; ---------- ;
@@ -122,8 +194,6 @@ dispatch_loop:
   jsr dispatch            ; run the opcode handler if it matches and move on
   cpy #1                  ; if a match was not found,
   bne dispatch_loop       ; keep going.
-  cpx #249              ; if the table is exhausted,
-  bcs _dispatch_loop_fail ; the opcode is unknown. 
   rts
 _dispatch_loop_fail:
   jmp bad_handler
@@ -187,7 +257,7 @@ _get_line_backspace_ignore:
 ; modifies: a, x, y
 expect_key:
   ldx input_ptr
-  inc input_ptr        ; move the buf ptr to the next char for the next call to get_Key
+  inc input_ptr        ; move the buf ptr to the next char
   lda input_buf,x      ; read the key from the buf
   beq _expect_key_fail ; if the input buffer is exhausted, throw error
   cmp #" "             ; if space was pressed,
@@ -249,6 +319,10 @@ cmd_map:
   .word  lst
   .byte "usg"
   .word  usg
+  .byte "cat"
+  .word  cat
+  .byte "exe"
+  .word  exe
 
 ; list the files in the current disk out to the serial port
 ; expects: addr to hold the address of the current disk
@@ -283,17 +357,72 @@ _usg_not_used:
   bne _usg_loop     ; loop again
   txa
   jsr hex_byte      ; print the usage info
+  cpx #"0"
+  beq _usg_skip_leading_zero
   stx SERIAL
+_usg_skip_leading_zero:
   sty SERIAL
-  lda #"/"          ; show that it is out of $20 (32 decimal)
+  lda #usg_msg
+  sta PRINT
+  lda #>usg_msg
+  sta PRINT+1
+  jsr print
+  rts
+
+cat:
+  ; write the file to FILELOAD
+  lda #>FILELOAD
+  sta fileop_ptr+1
+  lda #FILELOAD
+  sta fileop_ptr
+
+  ; read file starting at give sector
+  jsr get_byte
+  jsr read_file
+
+  lda #>FILELOAD
+  sta addr+1
+  lda #FILELOAD
+  sta addr
+
+  ldy #0
+_cat_loop:
+  lda (addr),y
   sta SERIAL
-  lda #"2"
-  sta SERIAL
-  lda #"0"
-  sta SERIAL
+
+  inc addr
+  bne _cat_no_carry
+  inc addr+1
+_cat_no_carry:
+  ; check if we have reached the end of the file
+  lda addr+1
+  cmp fileop_ptr+1
+  bne _cat_loop
+  lda addr
+  cmp fileop_ptr
+  bne _cat_loop
+
+_cat_done:
   lda #"\n"
   sta SERIAL
   rts
+
+exe:
+  ; write the file to FILELOAD
+  lda #>FILELOAD
+  sta fileop_ptr+1
+  lda #FILELOAD
+  sta fileop_ptr
+
+  ; read file starting at given sector
+  jsr get_byte
+  jsr read_file
+
+  ; actually run the file
+  jsr _exe_subroutine
+  rts
+_exe_subroutine:
+  jmp $0400
 
 ; ---------------- ;
 ; misc subroutines ;
@@ -328,6 +457,36 @@ hex_byte:
   jsr hex_nibble
   tay ; but the hex char for the LSN in y
 
+  rts
+
+; expect a key and return (in a) the value of a single hex char
+; modifies: a (duh)
+get_nibble:
+  jsr expect_key
+  cmp #$3a
+  bcc _get_nibble_digit
+  sec
+  sbc #"a" - 10
+  rts
+_get_nibble_digit:
+  sbc #"0" - 1
+  rts
+
+; wait for a key and return (in a) the value of a byte (2 hex chars)
+; modifies: a (duh)
+get_byte:
+  ; get the MS nibble and move it to the MS area of the a reg
+  jsr get_nibble
+  asl
+  asl
+  asl
+  asl
+  ; move the MSN to memory
+  sta BYTE_BUILD
+
+  ; get the LSN and combine it with the MSN
+  jsr get_nibble
+  ora BYTE_BUILD
   rts
 
 ; write the address of a null-terminated string to PRINT
@@ -366,11 +525,26 @@ err_msg:
   .byte "\n"
   .byte 0
 
+usg_msg:
+  .byte "*256B / 8K\n"
+  .byte 0
+
+delimiter:
+  .byte " | "
+  .byte 0
+
+loading_file:
+  .byte "Loading file..."
+  .byte 0
+
 welcome_msg:
   .byte CLEAR
   .byte "**** Ozpex DOS v0.1.0 ****\n"
   .byte "Disk A ready.\n\n"
   .byte 0
+
+  .org $fff8
+  jmp mainloop
 
   .org $fffc
   .word reset

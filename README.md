@@ -30,7 +30,7 @@ There is no PATH variables or environment variables of any kind in this OS, so a
 LST: list all the files on disk.
 DSK: move between disk A and B.
 EXE: copy a file to ram and jump to it as a subroutine.
-TYP: output the text content of a file.
+CAT: output the text content of a file.
 DEL: delete a file.
 CPY: copy a file to another name.
 CLS: clear the screen.

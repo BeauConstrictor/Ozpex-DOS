@@ -1,16 +1,23 @@
-# build an Ozpex DOS filesystem
+import os.path
+import os
 
 img = bytearray(8192)
 
 files = [
     ["test        txt", 3],
-    ["hello-world img", 4],
 ]
 
 data_sectors = [ # starting at 3
-    ["Hello World!", 0x00, True],
-    ["\x60",         0x00, True],
+    [bytearray("Hello, world! (in a plaintext file)", "utf-8"), 0x00, True],
 ]
+
+for f in os.listdir("imgs"):
+    filename = f.split(".")[0]
+    filename = filename[:12].ljust(12)
+    files.append([f"{filename}img", len(files)+3])
+    with open(os.path.join("imgs", f), "rb") as f:
+        binary = f.read()
+    data_sectors.append([binary, 0x00, True])
 
 # sectors 0 & 1 - filename mapping
 idx = 0
@@ -40,7 +47,10 @@ for i, s in enumerate(data_sectors):
     addr = (i+3) * 0x100
     info_byte = s[1] | (0x80 if s[2] else 0x00)
     for idx, byte in enumerate(s[0]):
-        img[addr + idx] = ord(byte)
+        try:
+            img[addr + idx] = byte
+        except IndexError:
+            print("overflow!")
     img[addr+0xff] = info_byte
 
 with open("../ozpex-64/bbrams/o64dos-fs.bin", "wb") as file:
