@@ -1,4 +1,4 @@
-  .org $8003
+  .org $0400
 
 SERIAL   = $8002
 CLEAR    =   $11

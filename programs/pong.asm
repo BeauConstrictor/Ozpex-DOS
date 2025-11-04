@@ -1,4 +1,4 @@
-    .org $8003
+    .org $0400
 
 ; memory map:
 TIMER    = $8001

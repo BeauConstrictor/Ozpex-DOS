@@ -178,12 +178,14 @@ _read_file_loop:
   bne _read_file_loop
 
   ; parse the final linked list byte
-  jsr inc_fop_addr
+  ; jsr inc_fop_addr
   lda (addr),y
   sta (fileop_ptr),y
-  asl
-  bcs _read_file_done
-  lsr
+  cmp #$80
+  beq _read_file_done
+  pha
+  jsr get_disk
+  pla
   jmp read_file
 
 _read_file_done:
@@ -492,13 +494,6 @@ _cat_loop:
   inc addr
   bne _cat_no_carry
   inc addr+1
-
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
 _cat_no_carry:
   ; check if we have reached the end of the file
   lda addr+1
@@ -525,10 +520,8 @@ exe:
   jsr read_file
 
   ; actually run the file
-  jsr _exe_subroutine
+  jsr FILELOAD
   rts
-_exe_subroutine:
-  jmp $0400
 
 hlp:
   lda #hlp_msg
