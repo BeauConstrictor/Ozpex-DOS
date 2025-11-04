@@ -14,13 +14,6 @@ OPERANDA   = $30      ; 1 byte
 OPERATOR   = $20      ; 1 byte
 OPERANDB   = $10      ; 1 byte
 
-main:
-  lda #welcome_message
-  sta PRINT
-  lda #>welcome_message
-  sta PRINT+1
-  jsr print
-
 loop:
   jsr expression
   jmp loop
@@ -161,21 +154,6 @@ _print_loop:
   jmp _print_loop
 _print_done:
   rts
-
-welcome_message:
-  .byte CLEAR, ESCAPE, "[7m"
-  .byte " O64 Calculator v1.0.1 "
-  .byte ESCAPE, "[0m", NEWLINE
-
-  .byte "TIP: Spaces are optional.", NEWLINE
-
-  .byte NEWLINE
-
-  .byte "Examples:", NEWLINE
-  .byte "01 + 02 = 03", NEWLINE
-  .byte "a5 - 02 = a3", NEWLINE
-
-  .byte NEWLINE, 0
 
 equals:
   .byte " = ", 0

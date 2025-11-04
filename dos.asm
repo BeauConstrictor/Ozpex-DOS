@@ -3,18 +3,23 @@
 DELETE    = $7f
 CLEAR     = $11
 
+A         = 0
+B         = 1
+T         = 2
+
 ; ---------- ;
 ; memory map ;
 ; ---------- ;
 SERIAL   = $8002
 DISKA    = $8003
 DISKB    = $a003
+DISKT    = $2400
 FILELOAD = $0400
 
 ; ----------------- ;
 ; memory allocation ;
 ; ----------------- ;
-disk         =   $00  ;   1 B;  0 for A and other for B
+disk         =   $00  ;   1 B;  0 for A, 1 for B and other for T
 addr         =   $01  ;   2 B;  general purpose word for subroutines
 byte         =   $03  ;   1 B;  general purpose byte for subroutines
 PRINT        =   $04  ;   2 B 
@@ -26,9 +31,13 @@ input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
 reset:
-  ; start on disk A
-  lda #00
+  ; start on disk T
+  lda #T
   sta disk
+
+  ; format the temp disk
+  jsr get_disk
+  jsr fmt_disk
 
   lda #welcome_msg
   sta PRINT
@@ -51,18 +60,26 @@ done:
 ; modifies: a
 get_disk:
   lda disk                   ; check which disk is active
-  bne _get_sector_not_disk_a ; if it's b, handle that
+  cmp #A
+  bne _get_sector_not_disk_a ; if it's not a, handle that
   lda #DISKA                 ; otherwise, load disk a's addr
   sta addr                   ; ^
   lda #>DISKA                ; ^
   sta addr+1                 ; ^
   rts                        ; then return
 _get_sector_not_disk_a:
+  cmp #B
+  bne _get_sector_not_disk_b ; if it's not b, handle that (its t)
   lda #DISKB                 ; load disk b's addr
   sta addr                   ; ^
   lda #>DISKB                ; ^
   sta addr+1                 ; ^
   rts                        ; return
+_get_sector_not_disk_b:
+  lda #DISKT                 ; load disk t's addr
+  sta addr                   ; ^
+  lda #>DISKT                ; ^
+  sta addr+1                 ; ^
 
 ; return the address of a certain sector (from A) on the current disk into addr
 ; expects: addr to hold the address of the current disk
@@ -161,6 +178,7 @@ _read_file_loop:
   bne _read_file_loop
 
   ; parse the final linked list byte
+  jsr inc_fop_addr
   lda (addr),y
   sta (fileop_ptr),y
   asl
@@ -168,11 +186,41 @@ _read_file_loop:
   lsr
   jmp read_file
 
-  ; increment
-  jsr inc_fop_addr
-
 _read_file_done:
   rts
+
+; format the disk with a blank OZDOS-FS
+; expects: addr to hold the address of 
+; modifies: TODO:
+fmt_disk:
+    lda #$00 ; initialise with zeros: means that a file does not exist in s0&s1,
+             ;                        means that a sector is not in use in s2.
+    ldx #$03 ; initialise first 3 pages of volume only
+_fmt_page:
+    ldy #$00
+_fmt_loop:
+    sta (addr),y
+    iny
+    bne _fmt_loop
+    inc addr+1
+    dex
+    bne _fmt_page
+
+    ; this signature helps the os know that the filesystem in not corrupted
+    lda #$de
+    ldy #$fc
+    sta (addr),y
+    iny
+    lda #$ad
+    sta (addr),y
+    iny
+    lda #$be
+    sta (addr),y
+    iny
+    lda #$ef
+    sta (addr),y
+
+    rts
 
 ; ---------- ;
 ; user input ;
@@ -183,6 +231,12 @@ run_command:
   jsr show_prompt
 
   jsr get_line
+
+  ; check if the input buffer is empty (its null terminated)
+  ldx input_ptr
+  lda input_buf,x
+  beq _dispatch_loop_done
+
   ldx #0                  ; start checking at the first opcode in the table
   jsr expect_key
   sta cmd_buf
@@ -190,10 +244,12 @@ run_command:
   sta cmd_buf+1
   jsr expect_key
   sta cmd_buf+2
+
 dispatch_loop:
   jsr dispatch            ; run the opcode handler if it matches and move on
   cpy #1                  ; if a match was not found,
   bne dispatch_loop       ; keep going.
+_dispatch_loop_done:
   rts
 _dispatch_loop_fail:
   jmp bad_handler
@@ -205,11 +261,17 @@ show_prompt:
   bne _show_prompt_not_a
   lda #"A"
   sta SERIAL
-  jmp _show_prompt_not_b
+  jmp _show_prompt_trail
 _show_prompt_not_a:
-  lda #"A"
+  cmp #1
+  bne _show_prompt_not_b
+  lda #"B"
   sta SERIAL
+  jmp _show_prompt_trail
 _show_prompt_not_b:
+  lda #"T"
+  sta SERIAL
+_show_prompt_trail:
   lda #">"
   sta SERIAL
   lda #" "
@@ -243,6 +305,8 @@ _get_line_done:
   sta input_buf,x
   rts
 _get_line_backspace:
+  cpx #0
+  beq _get_line_backspace_ignore
   lda #"\b"
   sta SERIAL
   lda #" "
@@ -327,11 +391,42 @@ cmd_map:
   .word  hlp
   .byte "cls"
   .word  cls
+  .byte "dsk"
+  .word  dsk
+
+dsk:
+  jsr expect_key
+  cmp #"a"
+  beq _dsk_a
+  cmp #"b"
+  beq _dsk_b
+  cmp #"t"
+  beq _dsk_t
+  jmp bad_handler
+  rts
+_dsk_a:
+  lda #A
+  sta disk
+  rts
+_dsk_b:
+  lda #B
+  sta disk
+  rts
+_dsk_t:
+  lda #T
+  sta disk
+  rts
 
 ; list the files in the current disk out to the serial port
 ; expects: addr to hold the address of the current disk
 ; modifies: a, x, y
 lst:
+  lda #lst_msg
+  sta PRINT
+  lda #>lst_msg
+  sta PRINT+1
+  jsr print
+
   ldx #32
 _list_loop:
   jsr print_file
@@ -397,6 +492,13 @@ _cat_loop:
   inc addr
   bne _cat_no_carry
   inc addr+1
+
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
 _cat_no_carry:
   ; check if we have reached the end of the file
   lda addr+1
@@ -551,7 +653,7 @@ bad_handler:
 welcome_msg:
   .byte CLEAR
   .byte "**** Ozpex DOS v0.2.0 ****\n"
-  .byte "Disk A ready.\n\n"
+  .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"
   .byte 0
@@ -571,6 +673,10 @@ hlp_msg_3:
   .byte "hlp: Display this help message.\n"
   .byte "usg: Check disk usage info.\n", 0
 
+lst_msg:
+  .byte "Filename     Ext | ID\n"
+  .byte "-----------------+---\n"
+  .byte 0
 
 err_msg:
   .byte "\n"
@@ -591,7 +697,7 @@ loading_file:
   .byte 0
 
   .org $fff8
-  jmp mainloop
+  .word mainloop
 
   .org $fffc
   .word reset

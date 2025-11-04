@@ -1,57 +1,82 @@
-import os.path
 import os
+import os.path
 
-img = bytearray(8192)
-
-files = [
-    ["test        txt", 3],
-]
-
-data_sectors = [ # starting at 3
-    [bytearray("Hello, world! (in a plaintext file)", "utf-8"), 0x00, True],
-]
-
-for f in os.listdir("imgs"):
-    filename = f.split(".")[0]
-    filename = filename[:12].ljust(12)
-    files.append([f"{filename}img", len(files)+3])
-    with open(os.path.join("imgs", f), "rb") as f:
-        binary = f.read()
-    data_sectors.append([binary, 0x00, True])
-
-# sectors 0 & 1 - filename mapping
-idx = 0
-for f in files:
-    for i, ch in enumerate(f[0]):
-        img[idx+i] = ord(ch)
-    img[idx+15] = f[1]
-    idx += 16
+class Filesystem:
+    def __init__(self) -> None:
+        self.sectors = [bytearray(256) for i in range(32)]
+        
+        self.sectors[2][0xfc] = 0xde
+        self.sectors[2][0xfd] = 0xad
+        self.sectors[2][0xfe] = 0xbe
+        self.sectors[2][0xff] = 0xef
+        
+        self.reserve_sector(0)
+        self.reserve_sector(1)
+        self.reserve_sector(2)
+        
+    def reserve_sector(self, index: int) -> int:
+        self.sectors[2][index] = 0xff
+    def free_sector(self, index: int) -> int:
+        self.sectors[2][index] = 0x00
+        
+    def get_free_sector(self) -> int:
+        for idx, s in enumerate(self.sectors[2]):
+            if s == 0x00: return idx
+        raise MemoryError("There is no space left on the drive.")
+        
+    def write_file(self, filename: str, data: bytearray) -> None:
+        sector = self.get_free_sector()
+        self.reserve_sector(sector)
+        
+        self.store_filename(filename, sector)
+        
+        index = 0
+        
+        for b in data:
+            if index == 255:
+                new_sector = self.get_free_sector()
+                self.sectors[sector][255] = new_sector
+                sector = new_sector
+                self.reserve_sector(sector)
+                index = 0
+            self.sectors[sector][index] = b
+            index += 1
+            
+        self.sectors[sector][255] = 0x80
+        
+    def store_filename(self, filename: str, sector: int) -> None:
+        extension = filename.split(".")[-1]
+        filename = ".".join(filename.split(".")[:-1]).ljust(12, " ")
+        
+        index = 0
+        
+        while True:
+            if self.sectors[0][index] != 0x00:
+                index += 16
+                continue
+            for ch in filename + extension:
+                self.sectors[0][index] = ord(ch)
+                index += 1
+            self.sectors[0][index] = sector
+            index += 1
+            return
+        raise MemoryError("There is no space left on the drive.")
+        
+    def export(self) -> bytearray:
+        image = bytearray()
+        for sector in self.sectors:
+            image.extend(sector)
+        return image
     
+if __name__ == "__main__":
+    fs = Filesystem()
     
-# sector 2 - sector usage info
-img[0x0200] = 0xff # sector 0 is always occupied
-img[0x0201] = 0xff # sector 1 is always occupied
-img[0x0202] = 0xff # sector 2 is always occupied
-
-for i, _ in enumerate(data_sectors, start=3):
-    img[0x0200 + i] = 0xff
-
-# sector 2 - filesystem signature / magic number
-img[0x02fc] = 0xde
-img[0x02fd] = 0xad
-img[0x02fe] = 0xbe
-img[0x02ff] = 0xef
-
-# sectors 3... - main data
-for i, s in enumerate(data_sectors):
-    addr = (i+3) * 0x100
-    info_byte = s[1] | (0x80 if s[2] else 0x00)
-    for idx, byte in enumerate(s[0]):
-        try:
-            img[addr + idx] = byte
-        except IndexError:
-            print("overflow!")
-    img[addr+0xff] = info_byte
-
-with open("../ozpex-64/bbrams/o64dos-fs.bin", "wb") as file:
-    file.write(img)
+    for fname in os.listdir("imgs"):
+        with open(os.path.join("imgs", fname), "rb") as f:
+            fs.write_file(fname, f.read())
+            
+    with open("README.md", "rb") as f:
+            fs.write_file("manual.txt", f.read())
+    
+    with open("../ozpex-64/bbrams/o64dos-fs.bin", "wb") as f:
+        f.write(fs.export())
