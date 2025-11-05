@@ -61,7 +61,7 @@ The sector can fit 32 entries, but only 29 files can exist (are there are only
 
 > DELETING
 
-1. Find file’s first sector from entry.
+1. Find file's first sector from entry.
 2. Traverse sector chain using link bytes.
 3. Mark all used sectors as free in sector 2.
 4. Null out the file entry.
