@@ -1,0 +1,23 @@
+WELCOME TO OZPEX DOS
+--------------------
+
+Welcome to Ozpex DOS, the game-changing operating system for the Ozpex 64
+computer.
+
+GETTING STARTED
+
+NOTE: Commands are written in uppercase for clarity, but should be entered in
+lowercase
+
+You have already managed to open the help disk, so you should be famililar with
+the commands DSK, LST and CAT. To see a list of all the commands, use HLP.
+
+When you power on the computer, you start with the T> drive active. This drive
+is stored in memory. The contents of this disk are wiped when you power down the
+computer, but this means you do not need a disk to try out the system.
+
+To make your system useful, you can attach a storage volume. This is how Ozpex
+DOS utilises the cartridge slots on the Ozpex 64. To do this, create a new bbram
+and put it in cartridge slot 1. Now, you can type FMT A to format drive A (the
+drive in slot 1) with an Ozpex DOS filesystem. This filesystem format is known
+as OZDOS-FS.

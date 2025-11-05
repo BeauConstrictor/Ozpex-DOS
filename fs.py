@@ -32,20 +32,22 @@ class Filesystem:
         
         index = 0
         
-        for b in data:
+        for i, b in enumerate(data):
             if index == 255:
                 new_sector = self.get_free_sector()
                 self.sectors[sector][255] = new_sector
                 sector = new_sector
                 self.reserve_sector(sector)
                 index = 0
+            if sector > 31:
+                raise MemoryError("There is no space left on the drive.")
             self.sectors[sector][index] = b
             index += 1
             
         self.sectors[sector][255] = 0x80
         
     def store_filename(self, filename: str, sector: int) -> None:
-        extension = filename.split(".")[-1]
+        extension = filename.split(".")[-1].ljust(3, "_")
         filename = ".".join(filename.split(".")[:-1]).ljust(12, " ")
         
         index = 0
@@ -68,15 +70,23 @@ class Filesystem:
             image.extend(sector)
         return image
     
-if __name__ == "__main__":
+def create_disk(dirpath: str) -> Filesystem:
     fs = Filesystem()
     
-    for fname in os.listdir("imgs"):
-        with open(os.path.join("imgs", fname), "rb") as f:
+    print(dirpath)
+    
+    for fname in os.listdir(dirpath):
+        path = os.path.join(dirpath, fname)
+        if fname.endswith(".asm"):
+            os.system(f"./vasm -dotdir -Fbin -esc {path}")
+            path = "a.out"
+        with open(path, "rb") as f:
             fs.write_file(fname, f.read())
             
-    with open("README.md", "rb") as f:
-            fs.write_file("manual.txt", f.read())
+    return fs
     
-    with open("../ozpex-64/bbrams/o64dos-fs.bin", "wb") as f:
-        f.write(fs.export())
+if __name__ == "__main__":
+    for d in os.listdir("disks"):
+        with open(os.path.join("build", d + ".img"), "wb") as f:
+            fs = create_disk(os.path.join("disks", d))
+            f.write(fs.export())
