@@ -80,6 +80,7 @@ def create_disk(dirpath: str) -> Filesystem:
         if fname.endswith(".asm"):
             os.system(f"./vasm -dotdir -Fbin -esc {path}")
             path = "a.out"
+            fname = fname.replace(".asm", ".prg")
         with open(path, "rb") as f:
             fs.write_file(fname, f.read())
             

@@ -1,13 +1,17 @@
 WELCOME TO OZPEX DOS
 --------------------
 
-Welcome to Ozpex DOS, the game-changing operating system for the Ozpex 64
-computer.
+Thank you for trying Ozpex DOS, the first (and only) operating system for the
+Ozpex 64 computer.
+
+Ozpex DOS is useful because it provides a filesystem, so a single cartridge can
+contain all the programs you use, as well as the documents that you have created
+with those programs.
 
 GETTING STARTED
 
 NOTE: Commands are written in uppercase for clarity, but should be entered in
-lowercase
+lowercase on the system.
 
 You have already managed to open the help disk, so you should be famililar with
 the commands DSK, LST and CAT. To see a list of all the commands, use HLP.
@@ -17,7 +21,12 @@ is stored in memory. The contents of this disk are wiped when you power down the
 computer, but this means you do not need a disk to try out the system.
 
 To make your system useful, you can attach a storage volume. This is how Ozpex
-DOS utilises the cartridge slots on the Ozpex 64. To do this, create a new bbram
+DOS utilises the cartridge slots on the Ozpex 64. To do this, create a new BBRAM
 and put it in cartridge slot 1. Now, you can type FMT A to format drive A (the
 drive in slot 1) with an Ozpex DOS filesystem. This filesystem format is known
-as OZDOS-FS.
+as OZDOS-FS. See technical.txt for more details on this format if you are
+curious.
+
+Now, you can type DSK A type change the active drive to A. Currently, this disk
+is be blank, so lets change that. In the next release of Ozpex DOS, there will
+be a command called EDT that will let you create a new text file and edit it.

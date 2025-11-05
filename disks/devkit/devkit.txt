@@ -1,0 +1,63 @@
+OZPEX DOS DEVKIT
+----------------
+
+This disk contains an experimental development kit for the Ozpex 64 and Ozpex
+DOS. Currently, it provides a hex monitor for debugging and an instant assembler
+to help you try out subroutines.
+
+MONITOR
+
+This monitor is a port of the one normally included in ROM on an Ozpex 64,
+modified to run from within Ozpex DOS.
+
+This is an excerpt from the Ozpex 64 manual, explaining the monitor:
+
+The machine monitor is a simple yet powerful tool for managing memory on an
+Ozpex 64. The program keeps just one piece of state: your current memory
+address, which is used as an argument by all the operations available, which
+are:
+
+- Writing: To write to memory, simply type out two hex characters and the byte
+  will immediately be written into memory and your current address will be
+  incremented so that your next write will come immediately after.
+
+- Reading: To read from memory, use a > sign and type out a memory address. The
+  monitor will then read and print out the values of every memory address
+  between your current address and the second one you typed.
+
+- Executing: Hitting an x will jump to your current address and run it as a
+  subroutine, so the program that you run can return to the monitor using an rts
+  instruction. Programs can also return by jumping directly to $fff8. To make
+  starting programs easier, you can use the ! key to quickly start the program
+  in slot 1, and the " key to start the program in slot 2.
+
+- Moving: You can move directly to a new address for any of the above operations
+  using the @ key, followed by a full hex memory address.
+
+- Commenting: If you type a ;, characters afterward will be completely ignored
+  until you press enter.
+
+ASSEMBLER
+
+This program is an instant-action assembler that immediately translates assembly
+instructions to machine code and writes them into memory so you can quickly try
+things out. This assembler is not complex or feature complete enough to provide
+a complete develpment environment, so it is mainly designed to help you get to
+grips with subroutines from the operating system before using them in your
+programs.
+
+This is an excerpt from the Ozpex 64 manual, explaining the assembler, with
+some content removed to keep it relevant:
+
+The Assembler makes it easier to enter programs into an Ozpex 64 by using
+instruction mnemonics.
+
+The assembler behaves similarly to the monitor, but with a few key differences:
+
+- Input is buffered, so nothing actually happens until you press enter, unlike
+  in the monitor. This makes it easier to correct mistakes.
+- You cannot read or execute memory in the assembler, so you must hit ESC,
+  and perform the operation from the monitor.
+
+The assembler uses standard 6502 assembly syntax, so there are many sources
+online that will help you learn the right syntax.

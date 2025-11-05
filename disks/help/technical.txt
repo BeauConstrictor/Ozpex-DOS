@@ -1,0 +1,83 @@
+TECHNICAL DETAILS
+-----------------
+
+For those of you that are curious, this document outlines some technical details
+about the implementation of Ozpex DOS that you may find interesting.
+
+FILESYSTEM
+
+Ozpex DOS uses a custom flat filesystem called OZDOS-FS, designed for 8K random
+access storage. It has no directories and supports up to 29 files.
+
+| STRUCTURE
+
+- 32 sectors total, each 256 bytes.
+- Sectors 0–1: File entries (directory).
+- Sector 2: Usage map + filesystem signature.
+- Sectors 3–31: Data sectors (file contents).
+
+| SECTORS 0 & 1
+
+Each file entry = 16 bytes:
+
+- 12 B: Filename (space-padded)
+- 3  B: Extension
+- 1  B: Starting sector (0 - 31)
+
+Unused entries are 16 bytes of `0x00`.  
+The sector can fit 32 entries, but only 29 files can exist (are there are only
+29 data sectors).
+
+| SECTOR 2
+
+- Bytes 0–31: Sector usage flags (`0xFF` = used, `0x00` = free).
+- First 3 bytes always `0xFF` (reserved sectors).
+- Bytes 252–255: Signature `DE AD BE EF` (filesystem validation).
+
+| DATA SECTORS 3 -> 31
+
+- 255 B: File data.
+- 1 B: Link byte (next sector + end flag).
+  - Bits 0–4: Next sector index.
+  - Bit 7: End-of-file flag (1 = last sector).
+
+| LIMITATIONS
+
+- Flat filesystem (no directories)
+- Fixed 8K drive size
+- Max 29 files total
+- Max file size: 7,395 bytes (255*29)
+- 12-char filenames, 3-char extensions
+- Poor performance on fragmentable media
+
+| PERFORMING COMMON OPERATIONS
+
+> NEW FILE
+
+1. Find first free sector in sector 2.
+2. Write data; mark sector as used.
+3. Link additional sectors if needed.
+4. Create file entry in sector 0 or 1.
+
+> DELETING
+
+1. Find file’s first sector from entry.
+2. Traverse sector chain using link bytes.
+3. Mark all used sectors as free in sector 2.
+4. Null out the file entry.
+
+> READING
+
+1. Find starting sector from entry.
+2. Read data sequentially, following link bytes.
+3. Stop when end flag (0x80) is set.
+
+> RENAMING
+
+1. Locate entry in sectors 0 or 1.
+2. Overwrite filename and/or extension bytes.
+
+> COMPOUND OPERATIONS
+
+You can achieve other operations such as copying overwriting and moving files
+between disks by combining these operations.

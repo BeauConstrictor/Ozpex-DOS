@@ -192,8 +192,8 @@ _read_file_done:
   rts
 
 ; format the disk with a blank OZDOS-FS
-; expects: addr to hold the address of 
-; modifies: TODO:
+; expects: addr to hold the address of the disk to format
+; modifies: a, x, y
 fmt_disk:
     lda #$00 ; initialise with zeros: means that a file does not exist in s0&s1,
              ;                        means that a sector is not in use in s2.
@@ -208,9 +208,21 @@ _fmt_loop:
     dex
     bne _fmt_page
 
+    dec addr+1
+
+    ; the first 3 sectors are always reserved
+    ldy #$00
+    lda #$ff
+    sta (addr),y
+    iny
+    sta (addr),y
+    iny
+    sta (addr),y
+    iny
+
     ; this signature helps the os know that the filesystem in not corrupted
-    lda #$de
     ldy #$fc
+    lda #$de
     sta (addr),y
     iny
     lda #$ad
@@ -395,6 +407,8 @@ cmd_map:
   .word  cls
   .byte "dsk"
   .word  dsk
+  .byte "fmt"
+  .word  fmt
 
 dsk:
   jsr expect_key
@@ -546,6 +560,16 @@ cls:
   sta SERIAL
   rts
 
+fmt:
+  lda disk
+  sta byte
+  jsr dsk
+  jsr get_disk
+  jsr fmt_disk
+  lda byte
+  sta disk
+  rts
+
 ; ---------------- ;
 ; misc subroutines ;
 ; ---------------- ;
@@ -665,6 +689,7 @@ hlp_msg_3:
   .byte "cls: Clear the screen.\n"
   .byte "hlp: Display this help message.\n"
   .byte "usg: Check disk usage info.\n", 0
+  .byte "fmt: Format a blank drive with OZDOS-FS.\n", 0
 
 lst_msg:
   .byte "Filename     Ext | ID\n"

@@ -77,13 +77,13 @@ get_key:
   cmp #">"                ; if "." was pressed,
   beq _get_key_addr_range ; print an address range
 
-  cmp #ESCAPE
-  beq EXIT_VEC
-
   sta SERIAL               ; echo back the char.
 
   cmp #"x"                ; if "x" was pressed,
   beq _get_key_execute    ; execute a program
+
+  cmp #"q"
+  beq _get_key_escape
 
   cmp #" "                 ; if space was pressed,
   beq get_key              ; wait for the next key.
@@ -93,6 +93,10 @@ get_key:
   beq _get_key_comment     ; start a comment.
 
   rts
+_get_key_escape:
+  lda #"\n"
+  sta SERIAL
+  jmp (EXIT_VEC)
 _get_key_newline:
   ; show the latest memory address
   jsr print_addr

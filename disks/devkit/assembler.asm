@@ -20,16 +20,7 @@ input_buf   = $0200   ; 256 bytes
 input_ptr   = $10     ; 1 bytes
 word_build  = $05     ; 2 bytes
 
-main:
-  lda #start_msg
-  sta PRINT
-  lda #>start_msg
-  sta PRINT + 1
-  jsr print
-
 mainloop:
-  lda #NEWLINE
-  sta SERIAL
   jsr print_addr
   jsr get_line
   jsr get_key
@@ -46,6 +37,8 @@ dispatch_loop:
   bne dispatch_loop ; keep going.
   cpx #249          ; if the table is exhausted,
   bcs _dispatch_loop_fail   ; the opcode is unknown. 
+  lda #NEWLINE
+  sta SERIAL
   jmp mainloop      ; otherwise, read the next opcode
 _dispatch_loop_fail:
   jmp bad_handler
@@ -218,11 +211,8 @@ _get_line_backspace:
 _get_line_backspace_ignore:
   jmp _get_line_loop
 _get_line_escape:
-  lda #end_msg
-  sta PRINT
-  lda #>end_msg
-  sta PRINT + 1
-  jsr print
+  lda #"\n"
+  sta SERIAL
   jmp (EXIT_VEC)
 
 ; expect from the input buffer and return (in a) a single key, ignoring spaces
@@ -324,17 +314,6 @@ _print_done:
   pla
   tay
   rts
-
-start_msg:
-  .byte NEWLINE, NEWLINE
-  .byte "(mnemonic mode)"
-  .byte 0
-
-end_msg:
-  .byte NEWLINE, NEWLINE
-  .byte "(normal mode)"
-  .byte NEWLINE
-  .byte 0
 
 err_msg:
   .byte NEWLINE
