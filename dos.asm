@@ -27,6 +27,8 @@ cmd_handler  =   $08  ;   2 B
 cmd_buf      =   $10  ;   2 B
 fileop_ptr   =   $12  ;   2 B;  pointer used for file reads and writes
 BYTE_BUILD   =   $14  ;   2 B;  used when reading in hex bytes
+filename     =   $16  ;  15 B;  filename after its length has been normalised
+fname_left   =   $25  ;   1 B;  how many more chars are needed for a full filename
 input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
@@ -331,8 +333,55 @@ _get_line_backspace:
 _get_line_backspace_ignore:
   jmp _get_line_loop
 
-; expect from the input buffer and return (in a) a single key, ignoring spaces
+; allow the user to type a varying length filename with a '.'
 ; modifies: a, x, y
+expect_filename:
+  ; everything below here is to get the filename to 12 chars.
+
+  lda #12 ; 12 char filenames
+  sta fname_left
+
+  ldy #0
+_expect_filename_nameloop:
+  jsr expect_key
+  cmp #"."
+  beq _expect_filename_spaces
+  sta filename,y
+  iny
+  dec fname_left
+  jmp _expect_filename_nameloop
+_expect_filename_spaces:
+  lda #" "
+  sta filename,y
+  iny
+  dec fname_left
+  bne _expect_filename_spaces
+  
+  jsr expect_key
+  sta filename+12
+  jsr expect_key
+  sta filename+13
+  jsr expect_key
+  sta filename+14
+
+  lda #0
+  sta filename+15
+
+  rts
+
+; return (in a) the sector id of a file name
+; returns $ff if the file cannot be found
+; expects: filename to be filled
+; modifies: TODO:
+get_fileid:
+  ; 1. write a subroutine to compare the file entry with the fileaname starting
+  ;    at addr
+  ; 2. run this in a loop for 512 bytes and return when a match is found
+  ; 3. if not returned yet, not match found so return $ff.
+  rts
+
+; expect from the input buffer and return (in a) a single key, ignoring spaces
+; modifies: a, x
 expect_key:
   ldx input_ptr
   inc input_ptr        ; move the buf ptr to the next char
@@ -340,6 +389,7 @@ expect_key:
   beq _expect_key_fail ; if the input buffer is exhausted, throw error
   cmp #" "             ; if space was pressed,
   beq expect_key       ; skip the key.
+
   rts
 _expect_key_fail:
   jmp bad_handler
@@ -485,6 +535,16 @@ _usg_skip_leading_zero:
   rts
 
 cat:
+  jsr expect_filename
+  lda #filename
+  sta PRINT
+  lda #>filename
+  sta PRINT+1
+  jsr print
+  lda #"\n"
+  sta SERIAL
+  rts
+
   ; write the file to FILELOAD
   lda #>FILELOAD
   sta fileop_ptr+1
@@ -669,7 +729,7 @@ bad_handler:
 
 welcome_msg:
   .byte CLEAR
-  .byte "**** Ozpex DOS v0.2.0 ****\n"
+  .byte "**** Ozpex DOS v0.3.0 ****\n"
   .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"

@@ -12,9 +12,9 @@ access storage. It has no directories and supports up to 29 files.
 | STRUCTURE
 
 - 32 sectors total, each 256 bytes.
-- Sectors 0–1: File entries (directory).
+- Sectors 0-1: File entries (directory).
 - Sector 2: Usage map + filesystem signature.
-- Sectors 3–31: Data sectors (file contents).
+- Sectors 3-31: Data sectors (file contents).
 
 | SECTORS 0 & 1
 
@@ -30,15 +30,15 @@ The sector can fit 32 entries, but only 29 files can exist (are there are only
 
 | SECTOR 2
 
-- Bytes 0–31: Sector usage flags (`0xFF` = used, `0x00` = free).
+- Bytes 0-31: Sector usage flags (`0xFF` = used, `0x00` = free).
 - First 3 bytes always `0xFF` (reserved sectors).
-- Bytes 252–255: Signature `DE AD BE EF` (filesystem validation).
+- Bytes 252-255: Signature `DE AD BE EF` (filesystem validation).
 
 | DATA SECTORS 3 -> 31
 
 - 255 B: File data.
 - 1 B: Link byte (next sector + end flag).
-  - Bits 0–4: Next sector index.
+  - Bits 0-4: Next sector index.
   - Bit 7: End-of-file flag (1 = last sector).
 
 | LIMITATIONS
