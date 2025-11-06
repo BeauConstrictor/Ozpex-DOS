@@ -144,6 +144,15 @@ _print_file_loop_ext:
 _print_file_done:
   rts
 
+; increment the addr ptr
+; modifies:
+inc_addr:
+  inc addr
+  bne _inc_addr_no_carry_addr
+  inc addr+1
+_inc_addr_no_carry_addr:
+  rts
+
 ; increment the fileop_ptr and addr ptr
 ; modifies: 
 inc_fop_addr:
@@ -151,10 +160,7 @@ inc_fop_addr:
   bne _inc_fop_addr_no_carry_fop
   inc fileop_ptr+1
 _inc_fop_addr_no_carry_fop:
-  inc addr
-  bne _inc_fop_addr_no_carry_addr
-  inc addr+1
-_inc_fop_addr_no_carry_addr:
+  jsr inc_addr
   rts
 
 ; take a sector id for the start of a file in a, and the location to write
@@ -372,12 +378,58 @@ _expect_filename_spaces:
 ; return (in a) the sector id of a file name
 ; returns $ff if the file cannot be found
 ; expects: filename to be filled
-; modifies: TODO:
+; modifies: a, x, y
 get_fileid:
-  ; 1. write a subroutine to compare the file entry with the fileaname starting
-  ;    at addr
-  ; 2. run this in a loop for 512 bytes and return when a match is found
-  ; 3. if not returned yet, not match found so return $ff.
+  ; go to sector 0
+  jsr get_disk
+
+_get_fileid_loop:
+  ; check the file for a match
+  jsr _get_fileid_match
+  beq _get_fileid_matched
+
+  ; skip over the sector id
+  lda addr
+  clc
+  adc #16
+  sta addr
+  bcc _get_fileid_no_carry
+  inc addr+1
+_get_fileid_no_carry:
+
+  jmp _get_fileid_loop
+
+  ; if not returned yet, not match found so return $ff
+  lda #$ff
+  rts
+
+_get_fileid_matched:
+  ; load the sector id
+  ldy #15
+  lda (addr),y
+  rts
+
+  jsr inc_addr
+
+_get_fileid_match:
+  ldx #15
+  ldy #0
+_get_fileid_match_loop:
+  lda filename,y
+  ; pha
+  ; lda (addr),y
+  ; sta SERIAL
+  ; pla
+  cmp (addr),y    ; no modifying addr
+  bne _get_fileid_match_fail
+  iny
+  dex
+  bne _get_fileid_match_loop
+  lda #$00
+  rts
+
+_get_fileid_match_fail:
+  lda #$ff
   rts
 
 ; expect from the input buffer and return (in a) a single key, ignoring spaces
@@ -535,15 +587,16 @@ _usg_skip_leading_zero:
   rts
 
 cat:
-  jsr expect_filename
-  lda #filename
-  sta PRINT
-  lda #>filename
-  sta PRINT+1
-  jsr print
-  lda #"\n"
-  sta SERIAL
-  rts
+  ; testing the new filename routine
+  ; jsr expect_filename
+  ; lda #filename
+  ; sta PRINT
+  ; lda #>filename
+  ; sta PRINT+1
+  ; jsr print
+  ; lda #"\n"
+  ; sta SERIAL
+  ; rts
 
   ; write the file to FILELOAD
   lda #>FILELOAD
@@ -552,7 +605,8 @@ cat:
   sta fileop_ptr
 
   ; read file starting at give sector
-  jsr get_byte
+  jsr expect_filename
+  jsr get_fileid
   jsr read_file
 
   lda #>FILELOAD
