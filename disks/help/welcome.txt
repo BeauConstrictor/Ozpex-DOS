@@ -16,17 +16,18 @@ lowercase on the system.
 You have already managed to open the help disk, so you should be famililar with
 the commands DSK, LST and CAT. To see a list of all the commands, use HLP.
 
-When you power on the computer, you start with the T> drive active. This drive
-is stored in memory. The contents of this disk are wiped when you power down the
-computer, but this means you do not need a disk to try out the system.
+When you power on the computer, you start with the T> drive active. This is a
+special drive that exists in RAM and is wiped whenever you turn off the
+computer. This drives exists so that you can try out what Ozpex DOS has to
+offer without first needing to obtain a BBSRAM cartridge.
 
 To make your system useful, you can attach a storage volume. This is how Ozpex
 DOS utilises the cartridge slots on the Ozpex 64. To do this, create a new BBRAM
 and put it in cartridge slot 1. Now, you can type FMT A to format drive A (the
 drive in slot 1) with an Ozpex DOS filesystem. This filesystem format is known
-as OZDOS-FS. See technical.txt for more details on this format if you are
+as OZDOS-FS. See technical.txt for more details on the format if you are
 curious.
 
-Now, you can type DSK A type change the active drive to A. Currently, this disk
+Now, you can type DRV A type change the active drive to A. Currently, this disk
 is be blank, so lets change that. In the next release of Ozpex DOS, there will
 be a command called EDT that will let you create a new text file and edit it.
