@@ -43,6 +43,8 @@ A> run pong.prg
 
 Another useful disk image is the `help.img` image. This one contains interesting and/or useful information about Ozpex DOS and how it works.
 
+Because the Ozpex 64 features 2 cartridge slots, which is where Ozpex DOS gets its drive system from, you can have 2 of these disk images loaded at once using the `-1 bbram:<filepath>` and `-2 bbram:<filepath>` options. You can switch between them with `drv a` and `drv b`.
+
 ## Commands
 
 Ozpex DOS features a minimal (as-in non-existent) command grammar. There is no system of arguments separated by spaces so spaces anywhere in a command are simply ignored. Specific commands are identified by the first 3 characters of your input and depending on the command being run, you may need to type a filename, drive letter or something else afterward.
