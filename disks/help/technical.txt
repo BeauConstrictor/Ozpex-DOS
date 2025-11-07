@@ -25,7 +25,7 @@ Each file entry = 16 bytes:
 - 1  B: Starting sector (0 - 31)
 
 Unused entries are 16 bytes of `0x00`.  
-The sector can fit 32 entries, but only 29 files can exist (are there are only
+The sector can fit 32 entries, but only 29 files can exist (as there are only
 29 data sectors).
 
 | SECTOR 2
@@ -79,5 +79,5 @@ The sector can fit 32 entries, but only 29 files can exist (are there are only
 
 > COMPOUND OPERATIONS
 
-You can achieve other operations such as copying overwriting and moving files
+You can achieve other operations such as copying, overwriting and moving files
 between disks by combining these operations.
