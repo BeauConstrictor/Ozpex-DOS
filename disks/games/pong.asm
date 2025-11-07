@@ -301,7 +301,7 @@ _print_done:
 score_message:
   .byte CLEAR
   .byte ESCAPE, "[7m"
-  .byte " O64 Pong v1.0.4 "
+  .byte " O64 Pong v1.0.5 "
   .byte ESCAPE, "[0m", NEWLINE
   .byte "Score: ", 0
 line_start:
