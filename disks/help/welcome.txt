@@ -18,7 +18,7 @@ the commands DSK, LST and CAT. To see a list of all the commands, use HLP.
 
 When you power on the computer, you start with the T> drive active. This is a
 special drive that exists in RAM and is wiped whenever you turn off the
-computer. This drives exists so that you can try out what Ozpex DOS has to
+computer. This drive exists so that you can try out what Ozpex DOS has to
 offer without first needing to obtain a BBSRAM cartridge.
 
 To make your system useful, you can attach a storage volume. This is how Ozpex
