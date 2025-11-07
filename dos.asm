@@ -119,26 +119,6 @@ _print_file_loop_ext:
   cpy #15
   bne _print_file_loop_ext
 
-  lda #delimiter
-  sta PRINT
-  lda #>delimiter
-  sta PRINT+1
-  jsr print
-
-  ; print the sector id
-  tya
-  pha
-  txa
-  pha
-  lda (addr),y
-  jsr hex_byte
-  stx SERIAL
-  sty SERIAL
-  pla
-  tax
-  pla
-  tay
-
   lda #"\n"
   sta SERIAL
 _print_file_done:
@@ -589,12 +569,6 @@ _dsk_verif_good
 ; expects: addr to hold the address of the current disk
 ; modifies: a, x, y
 lst:
-  lda #lst_msg
-  sta PRINT
-  lda #>lst_msg
-  sta PRINT+1
-  jsr print
-
   ldx #32
 _list_loop:
   jsr print_file
@@ -829,7 +803,7 @@ bad_handler:
 
 welcome_msg:
   .byte CLEAR
-  .byte "**** Ozpex DOS v0.3.2 ****\n"
+  .byte "**** Ozpex DOS v0.3.3 ****\n"
   .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"
@@ -851,11 +825,6 @@ hlp_msg_3:
   .byte "usg: Check disk usage info.\n", 0
   .byte "fmt: Format a blank drive with OZDOS-FS.\n", 0
 
-lst_msg:
-  .byte "Filename     Ext | ID\n"
-  .byte "-----------------+---\n"
-  .byte 0
-
 err_msg:
   .byte "\n"
   .byte ">:("
@@ -869,10 +838,6 @@ unfmted_msg:
 
 usg_msg:
   .byte "*256B / 8K\n"
-  .byte 0
-
-delimiter:
-  .byte " | "
   .byte 0
 
 loading_file:
