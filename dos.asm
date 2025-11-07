@@ -24,11 +24,11 @@ addr         =   $01  ;   2 B;  general purpose word for subroutines
 byte         =   $03  ;   1 B;  general purpose byte for subroutines
 PRINT        =   $04  ;   2 B 
 cmd_handler  =   $08  ;   2 B
-cmd_buf      =   $10  ;   2 B
-fileop_ptr   =   $12  ;   2 B;  pointer used for file reads and writes
-BYTE_BUILD   =   $14  ;   2 B;  used when reading in hex bytes
-filename     =   $16  ;  15 B;  filename after its length has been normalised
-fname_left   =   $25  ;   1 B;  how many more chars are needed for a full filename
+cmd_buf      =   $10  ;   3 B
+fileop_ptr   =   $13  ;   2 B;  pointer used for file reads and writes
+BYTE_BUILD   =   $15  ;   2 B;  used when reading in hex bytes
+filename     =   $17  ;  15 B;  filename after its length has been normalised
+fname_left   =   $26  ;   1 B;  how many more chars are needed for a full filename
 input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
@@ -244,6 +244,38 @@ _fmt_loop:
 
     rts
 
+; return if the disk is formatted with OZDOS-FS in carry
+; expects: addr to contain the address of the current disk
+; modifies: a, y
+verify_disk:
+  lda #02
+  jsr get_sector
+
+  ; TODO: maybe store DEADBEEF in rom somewhere and make this into a loop?
+  ldy #252
+  lda (addr),y
+  cmp #$de
+  bne _verify_disk_fail
+  iny
+  lda (addr),y
+  cmp #$ad
+  bne _verify_disk_fail
+  iny
+  lda (addr),y
+  cmp #$be
+  bne _verify_disk_fail
+  iny
+  lda (addr),y
+  cmp #$ef
+  bne _verify_disk_fail
+
+  ; return the appropriate result in carry
+  sec
+  rts
+_verify_disk_fail:
+  clc
+  rts
+
 ; ---------- ;
 ; user input ;
 ; ---------- ;
@@ -374,6 +406,34 @@ _expect_filename_spaces:
   sta filename+15
 
   rts
+
+; expect a single character from input buffer and change to the appopriate disk
+; note: will fail using bad_handler if a disk is not found (don't use this
+;       subroutine outside of the command loop)
+; expects:
+; modifies: a
+chdisk:
+  jsr expect_key
+  cmp #"a"
+  beq _chdisk_a
+  cmp #"b"
+  beq _chdisk_b
+  cmp #"t"
+  beq _chdisk_t
+  jmp bad_handler
+_chdisk_a:
+  lda #A
+  sta disk
+  rts
+_chdisk_b:
+  lda #B
+  sta disk
+  rts
+_chdisk_t:
+  lda #T
+  sta disk
+  rts
+
 
 ; return (in a) the sector id of a file name
 ; returns $ff if the file cannot be found
@@ -513,26 +573,21 @@ cmd_map:
   .word  fmt
 
 dsk:
-  jsr expect_key
-  cmp #"a"
-  beq _dsk_a
-  cmp #"b"
-  beq _dsk_b
-  cmp #"t"
-  beq _dsk_t
-  jmp bad_handler
-  rts
-_dsk_a:
-  lda #A
+  ; store the old disk in case the verification fails
+  lda disk
+  pha
+  jsr chdisk
+  jsr get_disk
+  jsr verify_disk
+  pla
+  bcs _dsk_verif_good
   sta disk
-  rts
-_dsk_b:
-  lda #B
-  sta disk
-  rts
-_dsk_t:
-  lda #T
-  sta disk
+  lda #unfmted_msg
+  sta PRINT
+  lda #>unfmted_msg
+  sta PRINT+1
+  jsr print
+_dsk_verif_good
   rts
 
 ; list the files in the current disk out to the serial port
@@ -677,7 +732,7 @@ cls:
 fmt:
   lda disk
   sta byte
-  jsr dsk
+  jsr chdisk
   jsr get_disk
   jsr fmt_disk
   lda byte
@@ -783,7 +838,7 @@ bad_handler:
 
 welcome_msg:
   .byte CLEAR
-  .byte "**** Ozpex DOS v0.3.0 ****\n"
+  .byte "**** Ozpex DOS v0.3.1 ****\n"
   .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"
@@ -814,6 +869,11 @@ err_msg:
   .byte "\n"
   .byte ">:("
   .byte "\n"
+  .byte 0
+
+unfmted_msg:
+  .byte "The drive has not been formatted for Ozpex DOS.\n"
+  .byte "Try fmt <drive> on it.\n"
   .byte 0
 
 usg_msg:
