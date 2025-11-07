@@ -31,7 +31,7 @@ $ python ozpex-64/main.py --rom ozpex-dos/build/rom.bin
 Finally, this will start the emulator with Ozpex DOS running. From here, you can experiment with commands on the RAM disk (`T>`), but none of your changes will save, and there will be no useful programs for you to try as a physical drive is not connected.
 
 ```
-$ python ozpex-64/main.py --rom ozpex-dos/build/rom.bin -1 ozpex-dos/build/games.img
+$ python ozpex-64/main.py --rom ozpex-dos/build/rom.bin -1 bbram:ozpex-dos/build/games.img
 ```
 
 This time, the emulator will start with a disk in cartridge slot 1 (drive A) that contains some games (only 1 at the minute - pong). You can use these commands to start the game from within DOS:
