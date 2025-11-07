@@ -803,7 +803,7 @@ bad_handler:
 
 welcome_msg:
   .byte CLEAR
-  .byte "**** Ozpex DOS v0.3.3 ****\n"
+  .byte "**** Ozpex DOS v0.3.4 ****\n"
   .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"
@@ -812,18 +812,19 @@ welcome_msg:
 hlp_msg:
   .byte "Ozpex DOS Commands:\n"
   .byte "These commands are included in ROM.\n\n"
-  .byte "lst: List all files on the disk\n"
+  .byte "lst: List all files on the drive\n"
   .byte "drv: Switch between drive A, B and T.\n", 0
 hlp_msg_2: 
-  .byte "run: Execute an *.img program.\n"
+  .byte "run: Execute a .prg program.\n"
   .byte "out: Output the contents of a text file.\n"
   .byte "del: Delete a file.\n"
-  .byte "cpy: Copy a file to another name.\n", 0
+  .byte "cpy: Copy a file onto the same drive.\n", 0
+  .byte "dcp: Copy a file to another drive.\n", 0
 hlp_msg_3:
   .byte "cls: Clear the screen.\n"
   .byte "hlp: Display this help message.\n"
-  .byte "usg: Check disk usage info.\n", 0
-  .byte "fmt: Format a blank drive with OZDOS-FS.\n", 0
+  .byte "usg: Check how much of a drive is in use.\n", 0
+  .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n", 0
 
 err_msg:
   .byte "\n"
