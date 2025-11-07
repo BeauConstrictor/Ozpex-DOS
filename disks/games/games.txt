@@ -5,4 +5,6 @@ This disk includes some simple Ozpex 64 games.
 
 PONG
 
-Pong was the first game for the Ozpex 64. You control the paddle on the left, and move it with W and S. The paddle on the right follows the ball perfectly and never misses, so the goal is to beat your own highscore.
+Pong was the first game for the Ozpex 64. You control the paddle on the left,
+and move it with W and S. The paddle on the right follows the ball perfectly and
+never misses, so the goal is to beat your own highscore.

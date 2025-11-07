@@ -434,7 +434,6 @@ _chdisk_t:
   sta disk
   rts
 
-
 ; return (in a) the sector id of a file name
 ; returns $ff if the file cannot be found
 ; expects: filename to be filled
@@ -476,10 +475,6 @@ _get_fileid_match:
   ldy #0
 _get_fileid_match_loop:
   lda filename,y
-  ; pha
-  ; lda (addr),y
-  ; sta SERIAL
-  ; pla
   cmp (addr),y    ; no modifying addr
   bne _get_fileid_match_fail
   iny
@@ -559,20 +554,20 @@ cmd_map:
   .word  lst
   .byte "usg"
   .word  usg
-  .byte "cat"
-  .word  cat
-  .byte "exe"
-  .word  exe
+  .byte "out"
+  .word  out
+  .byte "run"
+  .word  run
   .byte "hlp"
   .word  hlp
   .byte "cls"
   .word  cls
-  .byte "dsk"
-  .word  dsk
+  .byte "drv"
+  .word  drv
   .byte "fmt"
   .word  fmt
 
-dsk:
+drv:
   ; store the old disk in case the verification fails
   lda disk
   pha
@@ -641,18 +636,7 @@ _usg_skip_leading_zero:
   jsr print
   rts
 
-cat:
-  ; testing the new filename routine
-  ; jsr expect_filename
-  ; lda #filename
-  ; sta PRINT
-  ; lda #>filename
-  ; sta PRINT+1
-  ; jsr print
-  ; lda #"\n"
-  ; sta SERIAL
-  ; rts
-
+out:
   ; write the file to FILELOAD
   lda #>FILELOAD
   sta fileop_ptr+1
@@ -662,6 +646,9 @@ cat:
   ; read file starting at give sector
   jsr expect_filename
   jsr get_fileid
+  pha
+  jsr get_disk
+  pla
   jsr read_file
 
   lda #>FILELOAD
@@ -691,7 +678,7 @@ _cat_done:
   sta SERIAL
   rts
 
-exe:
+run:
   ; write the file to FILELOAD
   lda #>FILELOAD
   sta fileop_ptr+1
@@ -699,7 +686,11 @@ exe:
   sta fileop_ptr
 
   ; read file starting at given sector
-  jsr get_byte
+  jsr expect_filename
+  jsr get_fileid
+  pha
+  jsr get_disk
+  pla
   jsr read_file
 
   ; actually run the file
@@ -848,10 +839,10 @@ hlp_msg:
   .byte "Ozpex DOS Commands:\n"
   .byte "These commands are included in ROM.\n\n"
   .byte "lst: List all files on the disk\n"
-  .byte "dsk: Switch between Disk A, B and T.\n", 0
+  .byte "drv: Switch between drive A, B and T.\n", 0
 hlp_msg_2: 
-  .byte "exe: Execute an *.img program.\n"
-  .byte "cat: Output the contents of a text file.\n"
+  .byte "run: Execute an *.img program.\n"
+  .byte "out: Output the contents of a text file.\n"
   .byte "del: Delete a file.\n"
   .byte "cpy: Copy a file to another name.\n", 0
 hlp_msg_3:
