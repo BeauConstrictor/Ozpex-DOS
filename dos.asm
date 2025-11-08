@@ -22,13 +22,13 @@ FILELOAD = $0400
 disk         =   $00  ;   1 B;  0 for A, 1 for B and other for T
 addr         =   $01  ;   2 B;  general purpose word for subroutines
 byte         =   $03  ;   1 B;  general purpose byte for subroutines
-PRINT        =   $04  ;   2 B 
-cmd_handler  =   $08  ;   2 B
-cmd_buf      =   $10  ;   3 B
-fileop_ptr   =   $13  ;   2 B;  pointer used for file reads and writes
-BYTE_BUILD   =   $15  ;   2 B;  used when reading in hex bytes
-filename     =   $17  ;  15 B;  filename after its length has been normalised
-fname_left   =   $26  ;   1 B;  how many more chars are needed for a full filename
+PRINT        =   $05  ;   2 B
+cmd_handler  =   $09  ;   2 B
+cmd_buf      =   $11  ;   3 B
+fileop_ptr   =   $14  ;   2 B;  pointer used for file reads and writes
+BYTE_BUILD   =   $16  ;   2 B;  used when reading in hex bytes
+filename     =   $18  ;  15 B;  filename after its length has been normalised
+fname_left   =   $27  ;   1 B;  how many more chars are needed for a full filename
 input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
@@ -48,6 +48,8 @@ reset:
   jsr print
 
 mainloop:
+  jsr show_prompt
+  jsr get_line
   jsr run_command
   jmp mainloop
 
@@ -141,6 +143,22 @@ inc_fop_addr:
   inc fileop_ptr+1
 _inc_fop_addr_no_carry_fop:
   jsr inc_addr
+  rts
+
+; return (in carry) if addr is pointing to the end of the file
+; expects: fileop_ptr to the end of the file
+; modifies:
+check_eof:
+  lda addr+1
+  cmp fileop_ptr+1
+  bne _check_eof_fail
+  lda addr
+  cmp fileop_ptr
+  bne _check_eof_fail
+  sec
+  rts
+_check_eof_fail:
+  clc
   rts
 
 ; take a sector id for the start of a file in a, and the location to write
@@ -261,11 +279,9 @@ _verify_disk_fail:
 ; ---------- ;
 
 ; run a full command, (re-enters the mainloop on error)
+; expects: a command in the input buffer
+; modifies: a, x, y
 run_command:
-  jsr show_prompt
-
-  jsr get_line
-
   ; check if the input buffer is empty (its null terminated)
   ldx input_ptr
   lda input_buf,x
@@ -287,6 +303,44 @@ _dispatch_loop_done:
   rts
 _dispatch_loop_fail:
   jmp bad_handler
+
+; run a .cmd file
+; expects: a file of commands to be pointed to by addr
+; modifies: TODO:
+cmd_file_line:
+  lda #0
+  sta input_ptr
+  ldx #0
+_cmd_file_line_loop:
+  ldy #0
+  lda (addr),y
+  sta SERIAL
+  cmp #"\n"
+  beq _cmd_file_line_done
+  cmp #" "
+  beq _cmd_file_line_ignore
+  sta input_buf,x
+  inx
+  jsr inc_addr
+  jmp _cmd_file_line_loop
+_cmd_file_line_done:
+  ; end the command
+  lda #0
+  sta input_buf,x
+  
+  ; run the command
+  jsr run_command
+  jsr inc_addr
+  rts
+_cmd_file_line_ignore:
+  jsr inc_addr
+  jmp _cmd_file_line_loop
+
+cmd_file:
+  jsr cmd_file_line
+  jsr check_eof
+  ; bcc cmd_file
+  rts
 
 ; show the user's disk, prompting for input
 ; modifies: a
@@ -546,6 +600,33 @@ cmd_map:
   .word  drv
   .byte "fmt"
   .word  fmt
+  .byte "cmd"
+  .word  cmd
+
+cmd:
+  ; write the file to FILELOAD
+  lda #>FILELOAD
+  sta fileop_ptr+1
+  lda #FILELOAD
+  sta fileop_ptr
+
+  ; load the file
+  jsr expect_filename
+  jsr get_fileid
+  pha
+  jsr get_disk
+  pla
+  jsr read_file
+
+  ; go to the start of the file 
+  lda #>FILELOAD
+  sta addr+1
+  lda #FILELOAD
+  sta addr
+
+  ; run the commands
+  jsr cmd_file
+  rts
 
 drv:
   ; store the old disk in case the verification fails
@@ -635,17 +716,11 @@ _cat_loop:
   lda (addr),y
   sta SERIAL
 
-  inc addr
-  bne _cat_no_carry
-  inc addr+1
-_cat_no_carry:
+  jsr inc_addr
+
   ; check if we have reached the end of the file
-  lda addr+1
-  cmp fileop_ptr+1
-  bne _cat_loop
-  lda addr
-  cmp fileop_ptr
-  bne _cat_loop
+  jsr check_eof
+  bcc _cat_loop
 
 _cat_done:
   lda #"\n"
@@ -818,13 +893,14 @@ hlp_msg_2:
   .byte "run: Execute a .prg program.\n"
   .byte "out: Output the contents of a text file.\n"
   .byte "del: Delete a file.\n"
-  .byte "cpy: Copy a file onto the same drive.\n", 0
+  .byte "cpy: Copy a file onto the same drive.\n"
   .byte "dcp: Copy a file to another drive.\n", 0
 hlp_msg_3:
   .byte "cls: Clear the screen.\n"
   .byte "hlp: Display this help message.\n"
-  .byte "usg: Check how much of a drive is in use.\n", 0
-  .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n", 0
+  .byte "usg: Check how much of a drive is in use.\n"
+  .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n"
+  .byte "cmd: Run a file filled with DOS commands.\n", 0
 
 err_msg:
   .byte "\n"
@@ -845,8 +921,26 @@ loading_file:
   .byte "Loading file..."
   .byte 0
 
+
+  .org $ff00
+                     ; filesystem
+  jmp get_disk     ; sys00
+  jmp get_sector   ; sys03
+  jmp get_fileid   ; sys06
+  jmp read_file    ; sys09
+  jmp check_eof    ; sys0c
+  jmp inc_addr     ; sys0f
+                     ; system commands
+  jmp run_command  ; sys12
+  jmp cmd_file     ; sys15
+                     ; input helpers
+  jmp get_line     ; sys18
+  ; TODO: add versions of expect_* that don't fail back to the mainloop
+
+  ; exit vector
   .org $fff8
   .word mainloop
 
+  ; reset vector
   .org $fffc
   .word reset

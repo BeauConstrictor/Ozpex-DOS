@@ -1,0 +1,1280 @@
+Sections:
+00: "org0001:c003" (C003-C6EE)
+01: "org0002:ff00" (FF00-FF1B)
+02: "org0003:fff8" (FFF8-FFFA)
+03: "org0004:fffc" (FFFC-FFFE)
+
+
+Source: "dos.asm"
+                        	     1:   .org $c003
+                        	     2: 
+                        	     3: DELETE    = $7f
+                        	     4: CLEAR     = $11
+                        	     5: 
+                        	     6: A         = 0
+                        	     7: B         = 1
+                        	     8: T         = 2
+                        	     9: 
+                        	    10: ; ---------- ;
+                        	    11: ; memory map ;
+                        	    12: ; ---------- ;
+                        	    13: SERIAL   = $8002
+                        	    14: DISKA    = $8003
+                        	    15: DISKB    = $a003
+                        	    16: DISKT    = $2400
+                        	    17: FILELOAD = $0400
+                        	    18: 
+                        	    19: ; ----------------- ;
+                        	    20: ; memory allocation ;
+                        	    21: ; ----------------- ;
+                        	    22: disk         =   $00  ;   1 B;  0 for A, 1 for B and other for T
+                        	    23: addr         =   $01  ;   2 B;  general purpose word for subroutines
+                        	    24: byte         =   $03  ;   1 B;  general purpose byte for subroutines
+                        	    25: PRINT        =   $05  ;   2 B
+                        	    26: cmd_handler  =   $09  ;   2 B
+                        	    27: cmd_buf      =   $11  ;   3 B
+                        	    28: fileop_ptr   =   $14  ;   2 B;  pointer used for file reads and writes
+                        	    29: BYTE_BUILD   =   $16  ;   2 B;  used when reading in hex bytes
+                        	    30: filename     =   $18  ;  15 B;  filename after its length has been normalised
+                        	    31: fname_left   =   $27  ;   1 B;  how many more chars are needed for a full filename
+                        	    32: input_buf    = $0200  ; 256 B;  null-terminated
+                        	    33: input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
+                        	    34: 
+                        	    35: reset:
+                        	    36:   ; start on disk T
+00:C003 A902            	    37:   lda #T
+00:C005 8500            	    38:   sta disk
+                        	    39: 
+                        	    40:   ; format the temp disk
+00:C007 2027C0          	    41:   jsr get_disk
+00:C00A 20BBC0          	    42:   jsr fmt_disk
+                        	    43: 
+00:C00D A93E            	    44:   lda #welcome_msg
+00:C00F 8505            	    45:   sta PRINT
+00:C011 A9C4            	    46:   lda #>welcome_msg
+00:C013 8506            	    47:   sta PRINT+1
+00:C015 201EC4          	    48:   jsr print
+                        	    49: 
+                        	    50: mainloop:
+00:C018 2073C1          	    51:   jsr show_prompt
+00:C01B 209BC1          	    52:   jsr get_line
+00:C01E 2016C1          	    53:   jsr run_command
+00:C021 4C18C0          	    54:   jmp mainloop
+                        	    55: 
+                        	    56: done:
+00:C024 4C24C0          	    57:   jmp done
+                        	    58: 
+                        	    59: ; ------------------- ;
+                        	    60: ; filesystem routines ;
+                        	    61: ; ------------------- ;
+                        	    62: 
+                        	    63: ; output the address of the current disk in adddr
+                        	    64: ; modifies: a
+                        	    65: get_disk:
+00:C027 A500            	    66:   lda disk                   ; check which disk is active
+00:C029 C900            	    67:   cmp #A
+00:C02B D009            	    68:   bne _get_sector_not_disk_a ; if it's not a, handle that
+00:C02D A903            	    69:   lda #DISKA                 ; otherwise, load disk a's addr
+00:C02F 8501            	    70:   sta addr                   ; ^
+00:C031 A980            	    71:   lda #>DISKA                ; ^
+00:C033 8502            	    72:   sta addr+1                 ; ^
+00:C035 60              	    73:   rts                        ; then return
+                        	    74: _get_sector_not_disk_a:
+00:C036 C901            	    75:   cmp #B
+00:C038 D009            	    76:   bne _get_sector_not_disk_b ; if it's not b, handle that (its t)
+00:C03A A903            	    77:   lda #DISKB                 ; load disk b's addr
+00:C03C 8501            	    78:   sta addr                   ; ^
+00:C03E A9A0            	    79:   lda #>DISKB                ; ^
+00:C040 8502            	    80:   sta addr+1                 ; ^
+00:C042 60              	    81:   rts                        ; return
+                        	    82: _get_sector_not_disk_b:
+00:C043 A900            	    83:   lda #DISKT                 ; load disk t's addr
+00:C045 8501            	    84:   sta addr                   ; ^
+00:C047 A924            	    85:   lda #>DISKT                ; ^
+00:C049 8502            	    86:   sta addr+1                 ; ^
+                        	    87: 
+                        	    88: ; return the address of a certain sector (from A) on the current disk into addr
+                        	    89: ; expects: addr to hold the address of the current disk
+                        	    90: ; modifies: a
+                        	    91: get_sector:
+00:C04B 8503            	    92:   sta byte   ; put the sector id in memory
+00:C04D A502            	    93:   lda addr+1 ; get the high byte of the current disk
+00:C04F 18              	    94:   clc        ; always do this before addition
+00:C050 6503            	    95:   adc byte   ; move to the correct sector
+00:C052 8502            	    96:   sta addr+1 ; store the full address of the new sector
+00:C054 60              	    97:   rts        ; return
+                        	    98: 
+                        	    99: ; output the name and extension of the file entry
+                        	   100: ; expects addr to address the first byte of a file entry from sector 0 or 1
+                        	   101: ; modifies: a, y
+                        	   102: print_file:
+00:C055 A000            	   103:   ldy #00
+                        	   104: _print_file_loop_name:
+                        	   105:   ; loop over the 12 char file name
+00:C057 B101            	   106:   lda (addr),y
+00:C059 F01C            	   107:   beq _print_file_done ; if the entry contains nulls, the file does not exist
+00:C05B 8D0280          	   108:   sta SERIAL
+                        	   109: _print_file_loop:
+00:C05E C8              	   110:   iny
+00:C05F C00C            	   111:   cpy #12
+00:C061 D0F4            	   112:   bne _print_file_loop_name
+                        	   113:   ; start printing the extension
+00:C063 A92E            	   114:   lda #"."
+00:C065 8D0280          	   115:   sta SERIAL
+                        	   116: _print_file_loop_ext:
+                        	   117:   ; loop over the 3 char extension
+00:C068 B101            	   118:   lda (addr),y
+00:C06A 8D0280          	   119:   sta SERIAL
+00:C06D C8              	   120:   iny
+00:C06E C00F            	   121:   cpy #15
+00:C070 D0F6            	   122:   bne _print_file_loop_ext
+                        	   123: 
+00:C072 A95C            	   124:   lda #"\n"
+00:C074 8D0280          	   125:   sta SERIAL
+                        	   126: _print_file_done:
+00:C077 60              	   127:   rts
+                        	   128: 
+                        	   129: ; increment the addr ptr
+                        	   130: ; modifies:
+                        	   131: inc_addr:
+00:C078 E601            	   132:   inc addr
+00:C07A D002            	   133:   bne _inc_addr_no_carry_addr
+00:C07C E602            	   134:   inc addr+1
+                        	   135: _inc_addr_no_carry_addr:
+00:C07E 60              	   136:   rts
+                        	   137: 
+                        	   138: ; increment the fileop_ptr and addr ptr
+                        	   139: ; modifies: 
+                        	   140: inc_fop_addr:
+00:C07F E614            	   141:   inc fileop_ptr
+00:C081 D002            	   142:   bne _inc_fop_addr_no_carry_fop
+00:C083 E615            	   143:   inc fileop_ptr+1
+                        	   144: _inc_fop_addr_no_carry_fop:
+00:C085 2078C0          	   145:   jsr inc_addr
+00:C088 60              	   146:   rts
+                        	   147: 
+                        	   148: ; return (in carry) if addr is pointing to the end of the file
+                        	   149: ; expects: fileop_ptr to the end of the file
+                        	   150: ; modifies:
+                        	   151: check_eof:
+00:C089 A502            	   152:   lda addr+1
+00:C08B C515            	   153:   cmp fileop_ptr+1
+00:C08D D008            	   154:   bne _check_eof_fail
+00:C08F A501            	   155:   lda addr
+00:C091 C514            	   156:   cmp fileop_ptr
+00:C093 D002            	   157:   bne _check_eof_fail
+00:C095 38              	   158:   sec
+00:C096 60              	   159:   rts
+                        	   160: _check_eof_fail:
+00:C097 18              	   161:   clc
+00:C098 60              	   162:   rts
+                        	   163: 
+                        	   164: ; take a sector id for the start of a file in a, and the location to write
+                        	   165: ; the readout to in fileop_ptr. returns the contents starting at fileop_ptr,
+                        	   166: ; and leaves fileop_ptr as addr of the last byte of the file.
+                        	   167: ; expects: addr to hold the address of the current disk
+                        	   168: ; modifies: a, x, y
+                        	   169: read_file:
+00:C099 204BC0          	   170:   jsr get_sector
+00:C09C A000            	   171:   ldy #0
+00:C09E A2FF            	   172:   ldx #255
+                        	   173: _read_file_loop:
+                        	   174: 
+                        	   175:   ; copy over a single byte
+00:C0A0 B101            	   176:   lda (addr),y
+00:C0A2 9114            	   177:   sta (fileop_ptr),y
+                        	   178: 
+                        	   179:   ; point to the next byte
+00:C0A4 207FC0          	   180:   jsr inc_fop_addr
+                        	   181: 
+                        	   182:   ; loop again
+00:C0A7 CA              	   183:   dex
+00:C0A8 D0F6            	   184:   bne _read_file_loop
+                        	   185: 
+                        	   186:   ; parse the final linked list byte
+                        	   187:   ; jsr inc_fop_addr
+00:C0AA B101            	   188:   lda (addr),y
+00:C0AC 9114            	   189:   sta (fileop_ptr),y
+00:C0AE C980            	   190:   cmp #$80
+00:C0B0 F008            	   191:   beq _read_file_done
+00:C0B2 48              	   192:   pha
+00:C0B3 2027C0          	   193:   jsr get_disk
+00:C0B6 68              	   194:   pla
+00:C0B7 4C99C0          	   195:   jmp read_file
+                        	   196: 
+                        	   197: _read_file_done:
+00:C0BA 60              	   198:   rts
+                        	   199: 
+                        	   200: ; format the disk with a blank OZDOS-FS
+                        	   201: ; expects: addr to hold the address of the disk to format
+                        	   202: ; modifies: a, x, y
+                        	   203: fmt_disk:
+00:C0BB A900            	   204:     lda #$00 ; initialise with zeros: means that a file does not exist in s0&s1,
+                        	   205:              ;                        means that a sector is not in use in s2.
+00:C0BD A203            	   206:     ldx #$03 ; initialise first 3 pages of volume only
+                        	   207: _fmt_page:
+00:C0BF A000            	   208:     ldy #$00
+                        	   209: _fmt_loop:
+00:C0C1 9101            	   210:     sta (addr),y
+00:C0C3 C8              	   211:     iny
+00:C0C4 D0FB            	   212:     bne _fmt_loop
+00:C0C6 E602            	   213:     inc addr+1
+00:C0C8 CA              	   214:     dex
+00:C0C9 D0F4            	   215:     bne _fmt_page
+                        	   216: 
+00:C0CB C602            	   217:     dec addr+1
+                        	   218: 
+                        	   219:     ; the first 3 sectors are always reserved
+00:C0CD A000            	   220:     ldy #$00
+00:C0CF A9FF            	   221:     lda #$ff
+00:C0D1 9101            	   222:     sta (addr),y
+00:C0D3 C8              	   223:     iny
+00:C0D4 9101            	   224:     sta (addr),y
+00:C0D6 C8              	   225:     iny
+00:C0D7 9101            	   226:     sta (addr),y
+00:C0D9 C8              	   227:     iny
+                        	   228: 
+                        	   229:     ; this signature helps the os know that the filesystem in not corrupted
+00:C0DA A0FC            	   230:     ldy #$fc
+00:C0DC A9DE            	   231:     lda #$de
+00:C0DE 9101            	   232:     sta (addr),y
+00:C0E0 C8              	   233:     iny
+00:C0E1 A9AD            	   234:     lda #$ad
+00:C0E3 9101            	   235:     sta (addr),y
+00:C0E5 C8              	   236:     iny
+00:C0E6 A9BE            	   237:     lda #$be
+00:C0E8 9101            	   238:     sta (addr),y
+00:C0EA C8              	   239:     iny
+00:C0EB A9EF            	   240:     lda #$ef
+00:C0ED 9101            	   241:     sta (addr),y
+                        	   242: 
+00:C0EF 60              	   243:     rts
+                        	   244: 
+                        	   245: ; return if the disk is formatted with OZDOS-FS in carry
+                        	   246: ; expects: addr to contain the address of the current disk
+                        	   247: ; modifies: a, y
+                        	   248: verify_disk:
+00:C0F0 A902            	   249:   lda #02
+00:C0F2 204BC0          	   250:   jsr get_sector
+                        	   251: 
+                        	   252:   ; TODO: maybe store DEADBEEF in rom somewhere and make this into a loop?
+00:C0F5 A0FC            	   253:   ldy #252
+00:C0F7 B101            	   254:   lda (addr),y
+00:C0F9 C9DE            	   255:   cmp #$de
+00:C0FB D017            	   256:   bne _verify_disk_fail
+00:C0FD C8              	   257:   iny
+00:C0FE B101            	   258:   lda (addr),y
+00:C100 C9AD            	   259:   cmp #$ad
+00:C102 D010            	   260:   bne _verify_disk_fail
+00:C104 C8              	   261:   iny
+00:C105 B101            	   262:   lda (addr),y
+00:C107 C9BE            	   263:   cmp #$be
+00:C109 D009            	   264:   bne _verify_disk_fail
+00:C10B C8              	   265:   iny
+00:C10C B101            	   266:   lda (addr),y
+00:C10E C9EF            	   267:   cmp #$ef
+00:C110 D002            	   268:   bne _verify_disk_fail
+                        	   269: 
+                        	   270:   ; return the appropriate result in carry
+00:C112 38              	   271:   sec
+00:C113 60              	   272:   rts
+                        	   273: _verify_disk_fail:
+00:C114 18              	   274:   clc
+00:C115 60              	   275:   rts
+                        	   276: 
+                        	   277: ; ---------- ;
+                        	   278: ; user input ;
+                        	   279: ; ---------- ;
+                        	   280: 
+                        	   281: ; run a full command, (re-enters the mainloop on error)
+                        	   282: ; expects: a command in the input buffer
+                        	   283: ; modifies: a, x, y
+                        	   284: run_command:
+                        	   285:   ; check if the input buffer is empty (its null terminated)
+00:C116 AEFF01          	   286:   ldx input_ptr
+00:C119 BD0002          	   287:   lda input_buf,x
+00:C11C F018            	   288:   beq _dispatch_loop_done
+                        	   289: 
+00:C11E A200            	   290:   ldx #0                  ; start checking at the first opcode in the table
+00:C120 2066C2          	   291:   jsr expect_key
+00:C123 8511            	   292:   sta cmd_buf
+00:C125 2066C2          	   293:   jsr expect_key
+00:C128 8512            	   294:   sta cmd_buf+1
+00:C12A 2066C2          	   295:   jsr expect_key
+00:C12D 8513            	   296:   sta cmd_buf+2
+                        	   297: 
+                        	   298: dispatch_loop:
+00:C12F 2079C2          	   299:   jsr dispatch            ; run the opcode handler if it matches and move on
+00:C132 C001            	   300:   cpy #1                  ; if a match was not found,
+00:C134 D0F9            	   301:   bne dispatch_loop       ; keep going.
+                        	   302: _dispatch_loop_done:
+00:C136 60              	   303:   rts
+                        	   304: _dispatch_loop_fail:
+00:C137 4C30C4          	   305:   jmp bad_handler
+                        	   306: 
+                        	   307: ; run a .cmd file
+                        	   308: ; expects: a file of commands to be pointed to by addr
+                        	   309: ; modifies: TODO:
+                        	   310: cmd_file_line:
+00:C13A A900            	   311:   lda #0
+00:C13C 8DFF01          	   312:   sta input_ptr
+00:C13F A200            	   313:   ldx #0
+                        	   314: _cmd_file_line_loop:
+00:C141 A000            	   315:   ldy #0
+00:C143 B101            	   316:   lda (addr),y
+00:C145 8D0280          	   317:   sta SERIAL
+00:C148 C95C            	   318:   cmp #"\n"
+00:C14A F00E            	   319:   beq _cmd_file_line_done
+00:C14C C920            	   320:   cmp #" "
+00:C14E F016            	   321:   beq _cmd_file_line_ignore
+00:C150 9D0002          	   322:   sta input_buf,x
+00:C153 E8              	   323:   inx
+00:C154 2078C0          	   324:   jsr inc_addr
+00:C157 4C41C1          	   325:   jmp _cmd_file_line_loop
+                        	   326: _cmd_file_line_done:
+                        	   327:   ; end the command
+00:C15A A900            	   328:   lda #0
+00:C15C 9D0002          	   329:   sta input_buf,x
+                        	   330:   
+                        	   331:   ; run the command
+00:C15F 2016C1          	   332:   jsr run_command
+00:C162 2078C0          	   333:   jsr inc_addr
+00:C165 60              	   334:   rts
+                        	   335: _cmd_file_line_ignore:
+00:C166 2078C0          	   336:   jsr inc_addr
+00:C169 4C41C1          	   337:   jmp _cmd_file_line_loop
+                        	   338: 
+                        	   339: cmd_file:
+00:C16C 203AC1          	   340:   jsr cmd_file_line
+00:C16F 2089C0          	   341:   jsr check_eof
+                        	   342:   ; bcc cmd_file
+00:C172 60              	   343:   rts
+                        	   344: 
+                        	   345: ; show the user's disk, prompting for input
+                        	   346: ; modifies: a
+                        	   347: show_prompt:
+00:C173 A500            	   348:   lda disk
+00:C175 D008            	   349:   bne _show_prompt_not_a
+00:C177 A941            	   350:   lda #"A"
+00:C179 8D0280          	   351:   sta SERIAL
+00:C17C 4C90C1          	   352:   jmp _show_prompt_trail
+                        	   353: _show_prompt_not_a:
+00:C17F C901            	   354:   cmp #1
+00:C181 D008            	   355:   bne _show_prompt_not_b
+00:C183 A942            	   356:   lda #"B"
+00:C185 8D0280          	   357:   sta SERIAL
+00:C188 4C90C1          	   358:   jmp _show_prompt_trail
+                        	   359: _show_prompt_not_b:
+00:C18B A954            	   360:   lda #"T"
+00:C18D 8D0280          	   361:   sta SERIAL
+                        	   362: _show_prompt_trail:
+00:C190 A93E            	   363:   lda #">"
+00:C192 8D0280          	   364:   sta SERIAL
+00:C195 A920            	   365:   lda #" "
+00:C197 8D0280          	   366:   sta SERIAL
+00:C19A 60              	   367:   rts
+                        	   368: 
+                        	   369: ; buffer a line of input, null-terminated.
+                        	   370: get_line:
+00:C19B A200            	   371:   ldx #0
+00:C19D 8EFF01          	   372:   stx input_ptr
+                        	   373: _get_line_loop:
+00:C1A0 AD0280          	   374:   lda SERIAL
+00:C1A3 F0FB            	   375:   beq _get_line_loop      ; if no key pressed, check again
+                        	   376: 
+00:C1A5 C97F            	   377:   cmp #DELETE             ; if backspace pressed, remove last char
+00:C1A7 F01B            	   378:   beq _get_line_backspace
+00:C1A9 C95C            	   379:   cmp #"\b"               ; either of these codes may be emitted for a backspace
+00:C1AB F017            	   380:   beq _get_line_backspace
+                        	   381: 
+00:C1AD C95C            	   382:   cmp #"\n"               ; if enter pressed, write a null and exit
+00:C1AF F00A            	   383:   beq _get_line_done
+                        	   384: 
+00:C1B1 8D0280          	   385:   sta SERIAL              ; echo back the char
+                        	   386: 
+00:C1B4 9D0002          	   387:   sta input_buf,x         ; write the char to the input buffer
+00:C1B7 E8              	   388:   inx
+00:C1B8 4CA0C1          	   389:   jmp _get_line_loop
+                        	   390: _get_line_done:
+00:C1BB 8D0280          	   391:   sta SERIAL
+00:C1BE A900            	   392:   lda #0
+00:C1C0 9D0002          	   393:   sta input_buf,x
+00:C1C3 60              	   394:   rts
+                        	   395: _get_line_backspace:
+00:C1C4 E000            	   396:   cpx #0
+00:C1C6 F010            	   397:   beq _get_line_backspace_ignore
+00:C1C8 A95C            	   398:   lda #"\b"
+00:C1CA 8D0280          	   399:   sta SERIAL
+00:C1CD A920            	   400:   lda #" "
+00:C1CF 8D0280          	   401:   sta SERIAL
+00:C1D2 A95C            	   402:   lda #"\b"
+00:C1D4 8D0280          	   403:   sta SERIAL
+00:C1D7 CA              	   404:   dex
+                        	   405: _get_line_backspace_ignore:
+00:C1D8 4CA0C1          	   406:   jmp _get_line_loop
+                        	   407: 
+                        	   408: ; allow the user to type a varying length filename with a '.'
+                        	   409: ; modifies: a, x, y
+                        	   410: expect_filename:
+                        	   411:   ; everything below here is to get the filename to 12 chars.
+                        	   412: 
+00:C1DB A90C            	   413:   lda #12 ; 12 char filenames
+00:C1DD 8527            	   414:   sta fname_left
+                        	   415: 
+00:C1DF A000            	   416:   ldy #0
+                        	   417: _expect_filename_nameloop:
+00:C1E1 2066C2          	   418:   jsr expect_key
+00:C1E4 C92E            	   419:   cmp #"."
+00:C1E6 F009            	   420:   beq _expect_filename_spaces
+00:C1E8 991800          	   421:   sta filename,y
+00:C1EB C8              	   422:   iny
+00:C1EC C627            	   423:   dec fname_left
+00:C1EE 4CE1C1          	   424:   jmp _expect_filename_nameloop
+                        	   425: _expect_filename_spaces:
+00:C1F1 A920            	   426:   lda #" "
+00:C1F3 991800          	   427:   sta filename,y
+00:C1F6 C8              	   428:   iny
+00:C1F7 C627            	   429:   dec fname_left
+00:C1F9 D0F6            	   430:   bne _expect_filename_spaces
+                        	   431:   
+00:C1FB 2066C2          	   432:   jsr expect_key
+00:C1FE 8524            	   433:   sta filename+12
+00:C200 2066C2          	   434:   jsr expect_key
+00:C203 8525            	   435:   sta filename+13
+00:C205 2066C2          	   436:   jsr expect_key
+00:C208 8526            	   437:   sta filename+14
+                        	   438: 
+00:C20A A900            	   439:   lda #0
+00:C20C 8527            	   440:   sta filename+15
+                        	   441: 
+00:C20E 60              	   442:   rts
+                        	   443: 
+                        	   444: ; expect a single character from input buffer and change to the appopriate disk
+                        	   445: ; note: will fail using bad_handler if a disk is not found (don't use this
+                        	   446: ;       subroutine outside of the command loop)
+                        	   447: ; expects:
+                        	   448: ; modifies: a
+                        	   449: chdisk:
+00:C20F 2066C2          	   450:   jsr expect_key
+00:C212 C961            	   451:   cmp #"a"
+00:C214 F00B            	   452:   beq _chdisk_a
+00:C216 C962            	   453:   cmp #"b"
+00:C218 F00C            	   454:   beq _chdisk_b
+00:C21A C974            	   455:   cmp #"t"
+00:C21C F00D            	   456:   beq _chdisk_t
+00:C21E 4C30C4          	   457:   jmp bad_handler
+                        	   458: _chdisk_a:
+00:C221 A900            	   459:   lda #A
+00:C223 8500            	   460:   sta disk
+00:C225 60              	   461:   rts
+                        	   462: _chdisk_b:
+00:C226 A901            	   463:   lda #B
+00:C228 8500            	   464:   sta disk
+00:C22A 60              	   465:   rts
+                        	   466: _chdisk_t:
+00:C22B A902            	   467:   lda #T
+00:C22D 8500            	   468:   sta disk
+00:C22F 60              	   469:   rts
+                        	   470: 
+                        	   471: ; return (in a) the sector id of a file name
+                        	   472: ; returns $ff if the file cannot be found
+                        	   473: ; expects: filename to be filled
+                        	   474: ; modifies: a, x, y
+                        	   475: get_fileid:
+                        	   476:   ; go to sector 0
+00:C230 2027C0          	   477:   jsr get_disk
+                        	   478: 
+                        	   479: _get_fileid_loop:
+                        	   480:   ; check the file for a match
+00:C233 2051C2          	   481:   jsr _get_fileid_match
+00:C236 F011            	   482:   beq _get_fileid_matched
+                        	   483: 
+                        	   484:   ; skip over the sector id
+00:C238 A501            	   485:   lda addr
+00:C23A 18              	   486:   clc
+00:C23B 6910            	   487:   adc #16
+00:C23D 8501            	   488:   sta addr
+00:C23F 9002            	   489:   bcc _get_fileid_no_carry
+00:C241 E602            	   490:   inc addr+1
+                        	   491: _get_fileid_no_carry:
+                        	   492: 
+00:C243 4C33C2          	   493:   jmp _get_fileid_loop
+                        	   494: 
+                        	   495:   ; if not returned yet, not match found so return $ff
+00:C246 A9FF            	   496:   lda #$ff
+00:C248 60              	   497:   rts
+                        	   498: 
+                        	   499: _get_fileid_matched:
+                        	   500:   ; load the sector id
+00:C249 A00F            	   501:   ldy #15
+00:C24B B101            	   502:   lda (addr),y
+00:C24D 60              	   503:   rts
+                        	   504: 
+00:C24E 2078C0          	   505:   jsr inc_addr
+                        	   506: 
+                        	   507: _get_fileid_match:
+00:C251 A20F            	   508:   ldx #15
+00:C253 A000            	   509:   ldy #0
+                        	   510: _get_fileid_match_loop:
+00:C255 B91800          	   511:   lda filename,y
+00:C258 D101            	   512:   cmp (addr),y    ; no modifying addr
+00:C25A D007            	   513:   bne _get_fileid_match_fail
+00:C25C C8              	   514:   iny
+00:C25D CA              	   515:   dex
+00:C25E D0F5            	   516:   bne _get_fileid_match_loop
+00:C260 A900            	   517:   lda #$00
+00:C262 60              	   518:   rts
+                        	   519: 
+                        	   520: _get_fileid_match_fail:
+00:C263 A9FF            	   521:   lda #$ff
+00:C265 60              	   522:   rts
+                        	   523: 
+                        	   524: ; expect from the input buffer and return (in a) a single key, ignoring spaces
+                        	   525: ; modifies: a, x
+                        	   526: expect_key:
+00:C266 AEFF01          	   527:   ldx input_ptr
+00:C269 EEFF01          	   528:   inc input_ptr        ; move the buf ptr to the next char
+00:C26C BD0002          	   529:   lda input_buf,x      ; read the key from the buf
+00:C26F F005            	   530:   beq _expect_key_fail ; if the input buffer is exhausted, throw error
+00:C271 C920            	   531:   cmp #" "             ; if space was pressed,
+00:C273 F0F1            	   532:   beq expect_key       ; skip the key.
+                        	   533: 
+00:C275 60              	   534:   rts
+                        	   535: _expect_key_fail:
+00:C276 4C30C4          	   536:   jmp bad_handler
+                        	   537: 
+                        	   538: ; 1. match the xth element in the opcode table with the input buffer
+                        	   539: ; 2. if it matches, call the opcode handler
+                        	   540: ; 3. increment x by 5
+                        	   541: ; 4. return in y 1 if the opcode matched, otherwise 0
+                        	   542: dispatch:
+00:C279 BDB1C2          	   543:   lda cmd_map,x
+00:C27C C511            	   544:   cmp cmd_buf
+00:C27E D029            	   545:   bne _dispatch_miss_1
+00:C280 E8              	   546:   inx
+00:C281 BDB1C2          	   547:   lda cmd_map,x
+00:C284 C512            	   548:   cmp cmd_buf+1
+00:C286 D020            	   549:   bne _dispatch_miss_2
+00:C288 E8              	   550:   inx
+00:C289 BDB1C2          	   551:   lda cmd_map,x
+00:C28C C513            	   552:   cmp cmd_buf+2
+00:C28E D017            	   553:   bne _dispatch_miss_3
+00:C290 E8              	   554:   inx
+                        	   555: 
+00:C291 BDB1C2          	   556:   lda cmd_map,x
+00:C294 8509            	   557:   sta cmd_handler
+00:C296 BDB2C2          	   558:   lda cmd_map+1,x
+00:C299 850A            	   559:   sta cmd_handler+1
+                        	   560: 
+00:C29B 2027C0          	   561:   jsr get_disk
+                        	   562:   ; there is no indirect jsr, so we do this
+00:C29E 20A4C2          	   563:   jsr _dispatch_run
+00:C2A1 A001            	   564:   ldy #1
+00:C2A3 60              	   565:   rts
+                        	   566: _dispatch_run:
+00:C2A4 6C0900          	   567:   jmp (cmd_handler)
+                        	   568: 
+                        	   569: _dispatch_miss_3:
+00:C2A7 CA              	   570:   dex
+                        	   571: _dispatch_miss_2:
+00:C2A8 CA              	   572:   dex
+                        	   573: _dispatch_miss_1:
+00:C2A9 E8              	   574:   inx
+00:C2AA E8              	   575:   inx
+00:C2AB E8              	   576:   inx
+00:C2AC E8              	   577:   inx
+00:C2AD E8              	   578:   inx
+00:C2AE A000            	   579:   ldy #0
+00:C2B0 60              	   580:   rts
+                        	   581: 
+                        	   582: ; -------------- ;
+                        	   583: ; shell commands ;
+                        	   584: ; -------------- ;
+                        	   585: 
+                        	   586: cmd_map:
+00:C2B1 6C7374          	   587:   .byte "lst"
+00:C2B4 1DC3            	   588:   .word  lst
+00:C2B6 757367          	   589:   .byte "usg"
+00:C2B9 31C3            	   590:   .word  usg
+00:C2BB 6F7574          	   591:   .byte "out"
+00:C2BE 5EC3            	   592:   .word  out
+00:C2C0 72756E          	   593:   .byte "run"
+00:C2C3 91C3            	   594:   .word  run
+00:C2C5 686C70          	   595:   .byte "hlp"
+00:C2C8 ABC3            	   596:   .word  hlp
+00:C2CA 636C73          	   597:   .byte "cls"
+00:C2CD CDC3            	   598:   .word  cls
+00:C2CF 647276          	   599:   .byte "drv"
+00:C2D2 00C3            	   600:   .word  drv
+00:C2D4 666D74          	   601:   .byte "fmt"
+00:C2D7 D3C3            	   602:   .word  fmt
+00:C2D9 636D64          	   603:   .byte "cmd"
+00:C2DC DEC2            	   604:   .word  cmd
+                        	   605: 
+                        	   606: cmd:
+                        	   607:   ; write the file to FILELOAD
+00:C2DE A904            	   608:   lda #>FILELOAD
+00:C2E0 8515            	   609:   sta fileop_ptr+1
+00:C2E2 A900            	   610:   lda #FILELOAD
+00:C2E4 8514            	   611:   sta fileop_ptr
+                        	   612: 
+                        	   613:   ; load the file
+00:C2E6 20DBC1          	   614:   jsr expect_filename
+00:C2E9 2030C2          	   615:   jsr get_fileid
+00:C2EC 48              	   616:   pha
+00:C2ED 2027C0          	   617:   jsr get_disk
+00:C2F0 68              	   618:   pla
+00:C2F1 2099C0          	   619:   jsr read_file
+                        	   620: 
+                        	   621:   ; go to the start of the file 
+00:C2F4 A904            	   622:   lda #>FILELOAD
+00:C2F6 8502            	   623:   sta addr+1
+00:C2F8 A900            	   624:   lda #FILELOAD
+00:C2FA 8501            	   625:   sta addr
+                        	   626: 
+                        	   627:   ; run the commands
+00:C2FC 206CC1          	   628:   jsr cmd_file
+00:C2FF 60              	   629:   rts
+                        	   630: 
+                        	   631: drv:
+                        	   632:   ; store the old disk in case the verification fails
+00:C300 A500            	   633:   lda disk
+00:C302 48              	   634:   pha
+00:C303 200FC2          	   635:   jsr chdisk
+00:C306 2027C0          	   636:   jsr get_disk
+00:C309 20F0C0          	   637:   jsr verify_disk
+00:C30C 68              	   638:   pla
+00:C30D B00D            	   639:   bcs _dsk_verif_good
+00:C30F 8500            	   640:   sta disk
+00:C311 A987            	   641:   lda #unfmted_msg
+00:C313 8505            	   642:   sta PRINT
+00:C315 A9C6            	   643:   lda #>unfmted_msg
+00:C317 8506            	   644:   sta PRINT+1
+00:C319 201EC4          	   645:   jsr print
+                        	   646: _dsk_verif_good
+00:C31C 60              	   647:   rts
+                        	   648: 
+                        	   649: ; list the files in the current disk out to the serial port
+                        	   650: ; expects: addr to hold the address of the current disk
+                        	   651: ; modifies: a, x, y
+                        	   652: lst:
+00:C31D A220            	   653:   ldx #32
+                        	   654: _list_loop:
+00:C31F 2055C0          	   655:   jsr print_file
+00:C322 A501            	   656:   lda addr
+00:C324 18              	   657:   clc
+00:C325 6910            	   658:   adc #16
+00:C327 8501            	   659:   sta addr
+00:C329 9002            	   660:   bcc _list_didnt_carry
+00:C32B E602            	   661:   inc addr+1
+                        	   662: _list_didnt_carry:
+00:C32D CA              	   663:   dex
+00:C32E D0EF            	   664:   bne _list_loop
+00:C330 60              	   665:   rts
+                        	   666: 
+                        	   667: usg:
+00:C331 A902            	   668:   lda #02           ; go to sector two (usage info)
+00:C333 204BC0          	   669:   jsr get_sector    ; ^
+00:C336 A200            	   670:   ldx #00           ; start disk usage at zero
+00:C338 A000            	   671:   ldy #00           ; start reading usage info for sector 0
+                        	   672: _usg_loop:
+00:C33A B101            	   673:   lda (addr),y      ; check the usage for the sector
+00:C33C F001            	   674:   beq _usg_not_used ; if the sector is not used, don't count it
+00:C33E E8              	   675:   inx               ; if its used, count it
+                        	   676: _usg_not_used:
+00:C33F C8              	   677:   iny               ; move to the next sector
+00:C340 C020            	   678:   cpy #32           ; check if we have read all the sectors
+00:C342 D0F6            	   679:   bne _usg_loop     ; loop again
+00:C344 8A              	   680:   txa
+00:C345 20F0C3          	   681:   jsr hex_byte      ; print the usage info
+00:C348 E030            	   682:   cpx #"0"
+00:C34A F003            	   683:   beq _usg_skip_leading_zero
+00:C34C 8E0280          	   684:   stx SERIAL
+                        	   685: _usg_skip_leading_zero:
+00:C34F 8C0280          	   686:   sty SERIAL
+00:C352 A9D1            	   687:   lda #usg_msg
+00:C354 8505            	   688:   sta PRINT
+00:C356 A9C6            	   689:   lda #>usg_msg
+00:C358 8506            	   690:   sta PRINT+1
+00:C35A 201EC4          	   691:   jsr print
+00:C35D 60              	   692:   rts
+                        	   693: 
+                        	   694: out:
+                        	   695:   ; write the file to FILELOAD
+00:C35E A904            	   696:   lda #>FILELOAD
+00:C360 8515            	   697:   sta fileop_ptr+1
+00:C362 A900            	   698:   lda #FILELOAD
+00:C364 8514            	   699:   sta fileop_ptr
+                        	   700: 
+                        	   701:   ; read file starting at give sector
+00:C366 20DBC1          	   702:   jsr expect_filename
+00:C369 2030C2          	   703:   jsr get_fileid
+00:C36C 48              	   704:   pha
+00:C36D 2027C0          	   705:   jsr get_disk
+00:C370 68              	   706:   pla
+00:C371 2099C0          	   707:   jsr read_file
+                        	   708: 
+00:C374 A904            	   709:   lda #>FILELOAD
+00:C376 8502            	   710:   sta addr+1
+00:C378 A900            	   711:   lda #FILELOAD
+00:C37A 8501            	   712:   sta addr
+                        	   713: 
+00:C37C A000            	   714:   ldy #0
+                        	   715: _cat_loop:
+00:C37E B101            	   716:   lda (addr),y
+00:C380 8D0280          	   717:   sta SERIAL
+                        	   718: 
+00:C383 2078C0          	   719:   jsr inc_addr
+                        	   720: 
+                        	   721:   ; check if we have reached the end of the file
+00:C386 2089C0          	   722:   jsr check_eof
+00:C389 90F3            	   723:   bcc _cat_loop
+                        	   724: 
+                        	   725: _cat_done:
+00:C38B A95C            	   726:   lda #"\n"
+00:C38D 8D0280          	   727:   sta SERIAL
+00:C390 60              	   728:   rts
+                        	   729: 
+                        	   730: run:
+                        	   731:   ; write the file to FILELOAD
+00:C391 A904            	   732:   lda #>FILELOAD
+00:C393 8515            	   733:   sta fileop_ptr+1
+00:C395 A900            	   734:   lda #FILELOAD
+00:C397 8514            	   735:   sta fileop_ptr
+                        	   736: 
+                        	   737:   ; read file starting at given sector
+00:C399 20DBC1          	   738:   jsr expect_filename
+00:C39C 2030C2          	   739:   jsr get_fileid
+00:C39F 48              	   740:   pha
+00:C3A0 2027C0          	   741:   jsr get_disk
+00:C3A3 68              	   742:   pla
+00:C3A4 2099C0          	   743:   jsr read_file
+                        	   744: 
+                        	   745:   ; actually run the file
+00:C3A7 200004          	   746:   jsr FILELOAD
+00:C3AA 60              	   747:   rts
+                        	   748: 
+                        	   749: hlp:
+00:C3AB A988            	   750:   lda #hlp_msg
+00:C3AD 8505            	   751:   sta PRINT
+00:C3AF A9C4            	   752:   lda #>hlp_msg
+00:C3B1 8506            	   753:   sta PRINT+1
+00:C3B3 201EC4          	   754:   jsr print
+00:C3B6 A90E            	   755:   lda #hlp_msg_2
+00:C3B8 8505            	   756:   sta PRINT
+00:C3BA A9C5            	   757:   lda #>hlp_msg_2
+00:C3BC 8506            	   758:   sta PRINT+1
+00:C3BE 201EC4          	   759:   jsr print
+00:C3C1 A9B7            	   760:   lda #hlp_msg_3
+00:C3C3 8505            	   761:   sta PRINT
+00:C3C5 A9C5            	   762:   lda #>hlp_msg_3
+00:C3C7 8506            	   763:   sta PRINT+1
+00:C3C9 201EC4          	   764:   jsr print
+00:C3CC 60              	   765:   rts
+                        	   766: 
+                        	   767: cls:
+00:C3CD A911            	   768:   lda #$11
+00:C3CF 8D0280          	   769:   sta SERIAL
+00:C3D2 60              	   770:   rts
+                        	   771: 
+                        	   772: fmt:
+00:C3D3 A500            	   773:   lda disk
+00:C3D5 8503            	   774:   sta byte
+00:C3D7 200FC2          	   775:   jsr chdisk
+00:C3DA 2027C0          	   776:   jsr get_disk
+00:C3DD 20BBC0          	   777:   jsr fmt_disk
+00:C3E0 A503            	   778:   lda byte
+00:C3E2 8500            	   779:   sta disk
+00:C3E4 60              	   780:   rts
+                        	   781: 
+                        	   782: ; ---------------- ;
+                        	   783: ; misc subroutines ;
+                        	   784: ; ---------------- ;
+                        	   785: 
+                        	   786: ; return (in a) the a register as hex
+                        	   787: ; modifies: a (duh)
+                        	   788: hex_nibble:
+00:C3E5 C90A            	   789:   cmp #10
+00:C3E7 9004            	   790:   bcc _hex_nibble_digit
+00:C3E9 18              	   791:   clc
+00:C3EA 6957            	   792:   adc #"a" - 10
+00:C3EC 60              	   793:   rts
+                        	   794: _hex_nibble_digit:
+00:C3ED 6930            	   795:   adc #"0"
+00:C3EF 60              	   796:   rts
+                        	   797: 
+                        	   798: ; return (in x & y) the a register as hex
+                        	   799: ; modifies: x, y, a
+                        	   800: hex_byte:
+00:C3F0 48              	   801:   pha ; save the full value for later
+                        	   802:   ; get just the MSN
+00:C3F1 4A              	   803:   lsr
+00:C3F2 4A              	   804:   lsr
+00:C3F3 4A              	   805:   lsr
+00:C3F4 4A              	   806:   lsr
+00:C3F5 20E5C3          	   807:   jsr hex_nibble
+00:C3F8 AA              	   808:   tax ; but the hex char for the MSN in x
+                        	   809: 
+00:C3F9 68              	   810:   pla ; bring back the full value
+00:C3FA 290F            	   811:   and #$0f ; get just the LSN
+00:C3FC 20E5C3          	   812:   jsr hex_nibble
+00:C3FF A8              	   813:   tay ; but the hex char for the LSN in y
+                        	   814: 
+00:C400 60              	   815:   rts
+                        	   816: 
+                        	   817: ; expect a key and return (in a) the value of a single hex char
+                        	   818: ; modifies: a (duh)
+                        	   819: get_nibble:
+00:C401 2066C2          	   820:   jsr expect_key
+00:C404 C93A            	   821:   cmp #$3a
+00:C406 9004            	   822:   bcc _get_nibble_digit
+00:C408 38              	   823:   sec
+00:C409 E957            	   824:   sbc #"a" - 10
+00:C40B 60              	   825:   rts
+                        	   826: _get_nibble_digit:
+00:C40C E92F            	   827:   sbc #"0" - 1
+00:C40E 60              	   828:   rts
+                        	   829: 
+                        	   830: ; wait for a key and return (in a) the value of a byte (2 hex chars)
+                        	   831: ; modifies: a (duh)
+                        	   832: get_byte:
+                        	   833:   ; get the MS nibble and move it to the MS area of the a reg
+00:C40F 2001C4          	   834:   jsr get_nibble
+00:C412 0A              	   835:   asl
+00:C413 0A              	   836:   asl
+00:C414 0A              	   837:   asl
+00:C415 0A              	   838:   asl
+                        	   839:   ; move the MSN to memory
+00:C416 8516            	   840:   sta BYTE_BUILD
+                        	   841: 
+                        	   842:   ; get the LSN and combine it with the MSN
+00:C418 2001C4          	   843:   jsr get_nibble
+00:C41B 0516            	   844:   ora BYTE_BUILD
+00:C41D 60              	   845:   rts
+                        	   846: 
+                        	   847: ; write the address of a null-terminated string to PRINT
+                        	   848: ; modifies: a
+                        	   849: print:
+00:C41E 98              	   850:   tya
+00:C41F 48              	   851:   pha
+00:C420 A000            	   852:   ldy #0
+                        	   853: _print_loop:
+00:C422 B105            	   854:   lda (PRINT),y
+00:C424 F007            	   855:   beq _print_done
+00:C426 8D0280          	   856:   sta SERIAL
+00:C429 C8              	   857:   iny
+00:C42A 4C22C4          	   858:   jmp _print_loop
+                        	   859: _print_done:
+00:C42D 68              	   860:   pla
+00:C42E A8              	   861:   tay
+00:C42F 60              	   862:   rts
+                        	   863: 
+                        	   864: ; its easy to just jump here if there is an error
+                        	   865: bad_handler:
+00:C430 A97F            	   866:   lda #err_msg
+00:C432 8505            	   867:   sta PRINT
+00:C434 A9C6            	   868:   lda #>err_msg
+00:C436 8506            	   869:   sta PRINT+1
+00:C438 201EC4          	   870:   jsr print
+00:C43B 4C18C0          	   871:   jmp mainloop
+                        	   872: 
+                        	   873: ; -------- ;
+                        	   874: ; messages ;
+                        	   875: ; -------- ;
+                        	   876: 
+                        	   877: ; NOTE to self, remember to change to version numbers!
+                        	   878: 
+                        	   879: welcome_msg:
+00:C43E 11              	   880:   .byte CLEAR
+00:C43F 2A2A2A2A204F7A70	   881:   .byte "**** Ozpex DOS v0.3.4 ****\n"
+00:C447 657820444F532076
+00:C44F 302E332E34202A2A
+00:C457 2A2A5C6E
+00:C45B 54656D7020646973	   882:   .byte "Temp disk ready.\n\n"
+00:C463 6B2072656164792E
+00:C46B 5C6E5C6E
+                        	   883: 
+00:C46F 547970652027686C	   884:   .byte "Type 'hlp' for help.\n\n"
+00:C477 702720666F722068
+00:C47F 656C702E5C6E5C6E
+00:C487 00              	   885:   .byte 0
+                        	   886: 
+                        	   887: hlp_msg:
+00:C488 4F7A70657820444F	   888:   .byte "Ozpex DOS Commands:\n"
+00:C490 5320436F6D6D616E
+00:C498 64733A5C6E
+00:C49D 546865736520636F	   889:   .byte "These commands are included in ROM.\n\n"
+00:C4A5 6D6D616E64732061
+00:C4AD 726520696E636C75
+00:C4B5 64656420696E2052
+00:C4BD 4F4D2E5C6E5C6E
+00:C4C4 6C73743A204C6973	   890:   .byte "lst: List all files on the drive\n"
+00:C4CC 7420616C6C206669
+00:C4D4 6C6573206F6E2074
+00:C4DC 6865206472697665
+00:C4E4 5C6E
+00:C4E6 6472763A20537769	   891:   .byte "drv: Switch between drive A, B and T.\n", 0
+00:C4EE 7463682062657477
+00:C4F6 65656E2064726976
+00:C4FE 6520412C20422061
+00:C506 6E6420542E5C6E
+00:C50D 00
+                        	   892: hlp_msg_2: 
+00:C50E 72756E3A20457865	   893:   .byte "run: Execute a .prg program.\n"
+00:C516 637574652061202E
+00:C51E 7072672070726F67
+00:C526 72616D2E5C6E
+00:C52C 6F75743A204F7574	   894:   .byte "out: Output the contents of a text file.\n"
+00:C534 7075742074686520
+00:C53C 636F6E74656E7473
+00:C544 206F662061207465
+00:C54C 78742066696C652E
+00:C554 5C6E
+00:C556 64656C3A2044656C	   895:   .byte "del: Delete a file.\n"
+00:C55E 6574652061206669
+00:C566 6C652E5C6E
+00:C56B 6370793A20436F70	   896:   .byte "cpy: Copy a file onto the same drive.\n"
+00:C573 7920612066696C65
+00:C57B 206F6E746F207468
+00:C583 652073616D652064
+00:C58B 726976652E5C6E
+00:C592 6463703A20436F70	   897:   .byte "dcp: Copy a file to another drive.\n", 0
+00:C59A 7920612066696C65
+00:C5A2 20746F20616E6F74
+00:C5AA 6865722064726976
+00:C5B2 652E5C6E
+00:C5B6 00
+                        	   898: hlp_msg_3:
+00:C5B7 636C733A20436C65	   899:   .byte "cls: Clear the screen.\n"
+00:C5BF 6172207468652073
+00:C5C7 637265656E2E5C6E
+00:C5CF 686C703A20446973	   900:   .byte "hlp: Display this help message.\n"
+00:C5D7 706C617920746869
+00:C5DF 732068656C70206D
+00:C5E7 6573736167652E5C
+00:C5EF 6E
+00:C5F0 7573673A20436865	   901:   .byte "usg: Check how much of a drive is in use.\n"
+00:C5F8 636B20686F77206D
+00:C600 756368206F662061
+00:C608 2064726976652069
+00:C610 7320696E20757365
+00:C618 2E5C6E
+00:C61B 666D743A20466F72	   902:   .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n"
+00:C623 6D6174206120626C
+00:C62B 616E6B2064726976
+00:C633 6520776974682066
+00:C63B 6F72207573652077
+00:C643 697468204F7A7065
+00:C64B 7820444F532E5C6E
+00:C653 636D643A2052756E	   903:   .byte "cmd: Run a file filled with DOS commands.\n", 0
+00:C65B 20612066696C6520
+00:C663 66696C6C65642077
+00:C66B 69746820444F5320
+00:C673 636F6D6D616E6473
+00:C67B 2E5C6E
+00:C67E 00
+                        	   904: 
+                        	   905: err_msg:
+00:C67F 5C6E            	   906:   .byte "\n"
+00:C681 3E3A28          	   907:   .byte ">:("
+00:C684 5C6E            	   908:   .byte "\n"
+00:C686 00              	   909:   .byte 0
+                        	   910: 
+                        	   911: unfmted_msg:
+00:C687 5468652064726976	   912:   .byte "The drive has not been formatted for Ozpex DOS.\n"
+00:C68F 6520686173206E6F
+00:C697 74206265656E2066
+00:C69F 6F726D6174746564
+00:C6A7 20666F72204F7A70
+00:C6AF 657820444F532E5C
+00:C6B7 6E
+00:C6B8 54727920666D7420	   913:   .byte "Try fmt <drive> on it.\n"
+00:C6C0 3C64726976653E20
+00:C6C8 6F6E2069742E5C6E
+00:C6D0 00              	   914:   .byte 0
+                        	   915: 
+                        	   916: usg_msg:
+00:C6D1 2A32353642202F20	   917:   .byte "*256B / 8K\n"
+00:C6D9 384B5C6E
+00:C6DD 00              	   918:   .byte 0
+                        	   919: 
+                        	   920: loading_file:
+00:C6DE 4C6F6164696E6720	   921:   .byte "Loading file..."
+00:C6E6 66696C652E2E2E
+00:C6ED 00              	   922:   .byte 0
+                        	   923: 
+                        	   924: 
+                        	   925:   .org $ff00
+                        	   926:                      ; filesystem
+01:FF00 4C27C0          	   927:   jmp get_disk     ; sys00
+01:FF03 4C4BC0          	   928:   jmp get_sector   ; sys03
+01:FF06 4C30C2          	   929:   jmp get_fileid   ; sys06
+01:FF09 4C99C0          	   930:   jmp read_file    ; sys09
+01:FF0C 4C89C0          	   931:   jmp check_eof    ; sys0c
+01:FF0F 4C78C0          	   932:   jmp inc_addr     ; sys0f
+                        	   933:                      ; system commands
+01:FF12 4C16C1          	   934:   jmp run_command  ; sys12
+01:FF15 4C6CC1          	   935:   jmp cmd_file     ; sys15
+                        	   936:                      ; input helpers
+01:FF18 4C9BC1          	   937:   jmp get_line     ; sys18
+                        	   938:   ; TODO: add versions of expect_* that don't fail back to the mainloop
+                        	   939: 
+                        	   940:   ; exit vector
+                        	   941:   .org $fff8
+02:FFF8 18C0            	   942:   .word mainloop
+                        	   943: 
+                        	   944:   ; reset vector
+                        	   945:   .org $fffc
+03:FFFC 03C0            	   946:   .word reset
+                        	   947: 
+
+
+Symbols by name:
+A                                E:0000
+B                                E:0001
+BYTE_BUILD                       E:0016
+CLEAR                            E:0011
+DELETE                           E:007F
+DISKA                            E:8003
+DISKB                            E:A003
+DISKT                            E:2400
+FILELOAD                         E:0400
+PRINT                            E:0005
+SERIAL                           E:8002
+T                                E:0002
+_cat_done                        A:C38B
+_cat_loop                        A:C37E
+_chdisk_a                        A:C221
+_chdisk_b                        A:C226
+_chdisk_t                        A:C22B
+_check_eof_fail                  A:C097
+_cmd_file_line_done              A:C15A
+_cmd_file_line_ignore            A:C166
+_cmd_file_line_loop              A:C141
+_dispatch_loop_done              A:C136
+_dispatch_loop_fail              A:C137
+_dispatch_miss_1                 A:C2A9
+_dispatch_miss_2                 A:C2A8
+_dispatch_miss_3                 A:C2A7
+_dispatch_run                    A:C2A4
+_dsk_verif_good                  A:C31C
+_expect_filename_nameloop        A:C1E1
+_expect_filename_spaces          A:C1F1
+_expect_key_fail                 A:C276
+_fmt_loop                        A:C0C1
+_fmt_page                        A:C0BF
+_get_fileid_loop                 A:C233
+_get_fileid_match                A:C251
+_get_fileid_match_fail           A:C263
+_get_fileid_match_loop           A:C255
+_get_fileid_matched              A:C249
+_get_fileid_no_carry             A:C243
+_get_line_backspace              A:C1C4
+_get_line_backspace_ignore       A:C1D8
+_get_line_done                   A:C1BB
+_get_line_loop                   A:C1A0
+_get_nibble_digit                A:C40C
+_get_sector_not_disk_a           A:C036
+_get_sector_not_disk_b           A:C043
+_hex_nibble_digit                A:C3ED
+_inc_addr_no_carry_addr          A:C07E
+_inc_fop_addr_no_carry_fop       A:C085
+_list_didnt_carry                A:C32D
+_list_loop                       A:C31F
+_print_done                      A:C42D
+_print_file_done                 A:C077
+_print_file_loop                 A:C05E
+_print_file_loop_ext             A:C068
+_print_file_loop_name            A:C057
+_print_loop                      A:C422
+_read_file_done                  A:C0BA
+_read_file_loop                  A:C0A0
+_show_prompt_not_a               A:C17F
+_show_prompt_not_b               A:C18B
+_show_prompt_trail               A:C190
+_usg_loop                        A:C33A
+_usg_not_used                    A:C33F
+_usg_skip_leading_zero           A:C34F
+_verify_disk_fail                A:C114
+addr                             E:0001
+bad_handler                      A:C430
+byte                             E:0003
+chdisk                           A:C20F
+check_eof                        A:C089
+cls                              A:C3CD
+cmd                              A:C2DE
+cmd_buf                          E:0011
+cmd_file                         A:C16C
+cmd_file_line                    A:C13A
+cmd_handler                      E:0009
+cmd_map                          A:C2B1
+disk                             E:0000
+dispatch                         A:C279
+dispatch_loop                    A:C12F
+done                             A:C024
+drv                              A:C300
+err_msg                          A:C67F
+expect_filename                  A:C1DB
+expect_key                       A:C266
+filename                         E:0018
+fileop_ptr                       E:0014
+fmt                              A:C3D3
+fmt_disk                         A:C0BB
+fname_left                       E:0027
+get_byte                         A:C40F
+get_disk                         A:C027
+get_fileid                       A:C230
+get_line                         A:C19B
+get_nibble                       A:C401
+get_sector                       A:C04B
+hex_byte                         A:C3F0
+hex_nibble                       A:C3E5
+hlp                              A:C3AB
+hlp_msg                          A:C488
+hlp_msg_2                        A:C50E
+hlp_msg_3                        A:C5B7
+inc_addr                         A:C078
+inc_fop_addr                     A:C07F
+input_buf                        E:0200
+input_ptr                        E:01FF
+loading_file                     A:C6DE
+lst                              A:C31D
+mainloop                         A:C018
+out                              A:C35E
+print                            A:C41E
+print_file                       A:C055
+read_file                        A:C099
+reset                            A:C003
+run                              A:C391
+run_command                      A:C116
+show_prompt                      A:C173
+unfmted_msg                      A:C687
+usg                              A:C331
+usg_msg                          A:C6D1
+verify_disk                      A:C0F0
+welcome_msg                      A:C43E
+
+Symbols by value:
+0000 A
+0000 disk
+0001 B
+0001 addr
+0002 T
+0003 byte
+0005 PRINT
+0009 cmd_handler
+0011 CLEAR
+0011 cmd_buf
+0014 fileop_ptr
+0016 BYTE_BUILD
+0018 filename
+0027 fname_left
+007F DELETE
+01FF input_ptr
+0200 input_buf
+0400 FILELOAD
+2400 DISKT
+8002 SERIAL
+8003 DISKA
+A003 DISKB
+C003 reset
+C018 mainloop
+C024 done
+C027 get_disk
+C036 _get_sector_not_disk_a
+C043 _get_sector_not_disk_b
+C04B get_sector
+C055 print_file
+C057 _print_file_loop_name
+C05E _print_file_loop
+C068 _print_file_loop_ext
+C077 _print_file_done
+C078 inc_addr
+C07E _inc_addr_no_carry_addr
+C07F inc_fop_addr
+C085 _inc_fop_addr_no_carry_fop
+C089 check_eof
+C097 _check_eof_fail
+C099 read_file
+C0A0 _read_file_loop
+C0BA _read_file_done
+C0BB fmt_disk
+C0BF _fmt_page
+C0C1 _fmt_loop
+C0F0 verify_disk
+C114 _verify_disk_fail
+C116 run_command
+C12F dispatch_loop
+C136 _dispatch_loop_done
+C137 _dispatch_loop_fail
+C13A cmd_file_line
+C141 _cmd_file_line_loop
+C15A _cmd_file_line_done
+C166 _cmd_file_line_ignore
+C16C cmd_file
+C173 show_prompt
+C17F _show_prompt_not_a
+C18B _show_prompt_not_b
+C190 _show_prompt_trail
+C19B get_line
+C1A0 _get_line_loop
+C1BB _get_line_done
+C1C4 _get_line_backspace
+C1D8 _get_line_backspace_ignore
+C1DB expect_filename
+C1E1 _expect_filename_nameloop
+C1F1 _expect_filename_spaces
+C20F chdisk
+C221 _chdisk_a
+C226 _chdisk_b
+C22B _chdisk_t
+C230 get_fileid
+C233 _get_fileid_loop
+C243 _get_fileid_no_carry
+C249 _get_fileid_matched
+C251 _get_fileid_match
+C255 _get_fileid_match_loop
+C263 _get_fileid_match_fail
+C266 expect_key
+C276 _expect_key_fail
+C279 dispatch
+C2A4 _dispatch_run
+C2A7 _dispatch_miss_3
+C2A8 _dispatch_miss_2
+C2A9 _dispatch_miss_1
+C2B1 cmd_map
+C2DE cmd
+C300 drv
+C31C _dsk_verif_good
+C31D lst
+C31F _list_loop
+C32D _list_didnt_carry
+C331 usg
+C33A _usg_loop
+C33F _usg_not_used
+C34F _usg_skip_leading_zero
+C35E out
+C37E _cat_loop
+C38B _cat_done
+C391 run
+C3AB hlp
+C3CD cls
+C3D3 fmt
+C3E5 hex_nibble
+C3ED _hex_nibble_digit
+C3F0 hex_byte
+C401 get_nibble
+C40C _get_nibble_digit
+C40F get_byte
+C41E print
+C422 _print_loop
+C42D _print_done
+C430 bad_handler
+C43E welcome_msg
+C488 hlp_msg
+C50E hlp_msg_2
+C5B7 hlp_msg_3
+C67F err_msg
+C687 unfmted_msg
+C6D1 usg_msg
+C6DE loading_file
