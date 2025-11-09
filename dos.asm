@@ -38,7 +38,6 @@ reset:
   sta disk
 
   ; format the temp disk
-  jsr get_disk
   jsr fmt_disk
 
   lda #welcome_msg
@@ -61,8 +60,9 @@ done:
 ; ------------------- ;
 
 ; output the address of the current disk in adddr
-; modifies: a
+; modifies:
 get_disk:
+  pha
   lda disk                   ; check which disk is active
   cmp #A
   bne _get_sector_not_disk_a ; if it's not a, handle that
@@ -70,6 +70,7 @@ get_disk:
   sta addr                   ; ^
   lda #>DISKA                ; ^
   sta addr+1                 ; ^
+  pla
   rts                        ; then return
 _get_sector_not_disk_a:
   cmp #B
@@ -78,15 +79,18 @@ _get_sector_not_disk_a:
   sta addr                   ; ^
   lda #>DISKB                ; ^
   sta addr+1                 ; ^
+  pla
   rts                        ; return
 _get_sector_not_disk_b:
   lda #DISKT                 ; load disk t's addr
   sta addr                   ; ^
   lda #>DISKT                ; ^
   sta addr+1                 ; ^
+  pla
+  rts
 
 ; return the address of a certain sector (from A) on the current disk into addr
-; expects: addr to hold the address of the current disk
+; expects: addr to point to the start of the disk
 ; modifies: a
 get_sector:
   sta byte   ; put the sector id in memory
@@ -146,7 +150,7 @@ _inc_fop_addr_no_carry_fop:
   rts
 
 ; return (in carry) if addr is pointing to the end of the file
-; expects: fileop_ptr to the end of the file
+; expects: fileop_ptr to point to the end of the file
 ; modifies:
 check_eof:
   lda addr+1
@@ -164,9 +168,12 @@ _check_eof_fail:
 ; take a sector id for the start of a file in a, and the location to write
 ; the readout to in fileop_ptr. returns the contents starting at fileop_ptr,
 ; and leaves fileop_ptr as addr of the last byte of the file.
-; expects: addr to hold the address of the current disk
+; expects:
 ; modifies: a, x, y
 read_file:
+  jsr get_fileid
+_read_file_loop_goto_sector:
+  jsr get_disk
   jsr get_sector
   ldy #0
   ldx #255
@@ -189,63 +196,63 @@ _read_file_loop:
   sta (fileop_ptr),y
   cmp #$80
   beq _read_file_done
-  pha
-  jsr get_disk
-  pla
-  jmp read_file
+  jmp _read_file_loop_goto_sector
 
 _read_file_done:
   rts
 
 ; format the disk with a blank OZDOS-FS
-; expects: addr to hold the address of the disk to format
+; expects:
 ; modifies: a, x, y
 fmt_disk:
-    lda #$00 ; initialise with zeros: means that a file does not exist in s0&s1,
-             ;                        means that a sector is not in use in s2.
-    ldx #$03 ; initialise first 3 pages of volume only
+  jsr get_disk
+  lda #$00 ; initialise with zeros: means that a file does not exist in s0&s1,
+            ;                        means that a sector is not in use in s2.
+  ldx #$03 ; initialise first 3 pages of volume only
 _fmt_page:
-    ldy #$00
+  ldy #$00
 _fmt_loop:
-    sta (addr),y
-    iny
-    bne _fmt_loop
-    inc addr+1
-    dex
-    bne _fmt_page
+  sta (addr),y
+  iny
+  bne _fmt_loop
+  inc addr+1
+  dex
+  bne _fmt_page
 
-    dec addr+1
+  dec addr+1
 
-    ; the first 3 sectors are always reserved
-    ldy #$00
-    lda #$ff
-    sta (addr),y
-    iny
-    sta (addr),y
-    iny
-    sta (addr),y
-    iny
+  ; the first 3 sectors are always reserved
+  ldy #$00
+  lda #$ff
+  sta (addr),y
+  iny
+  sta (addr),y
+  iny
+  sta (addr),y
+  iny
 
-    ; this signature helps the os know that the filesystem in not corrupted
-    ldy #$fc
-    lda #$de
-    sta (addr),y
-    iny
-    lda #$ad
-    sta (addr),y
-    iny
-    lda #$be
-    sta (addr),y
-    iny
-    lda #$ef
-    sta (addr),y
+  ; this signature helps the os know that the filesystem in not corrupted
+  ldy #$fc
+  lda #$de
+  sta (addr),y
+  iny
+  lda #$ad
+  sta (addr),y
+  iny
+  lda #$be
+  sta (addr),y
+  iny
+  lda #$ef
+  sta (addr),y
 
-    rts
+  rts
 
 ; return if the disk is formatted with OZDOS-FS in carry
-; expects: addr to contain the address of the current disk
+; expects:
 ; modifies: a, y
 verify_disk:
+  jsr get_disk
+
   lda #02
   jsr get_sector
 
@@ -520,7 +527,6 @@ dispatch:
   lda cmd_map+1,x
   sta cmd_handler+1
 
-  jsr get_disk
   ; there is no indirect jsr, so we do this
   jsr _dispatch_run
   ldy #1
@@ -562,40 +568,12 @@ cmd_map:
   .word  drv
   .byte "fmt"
   .word  fmt
-  .byte "cmd"
-  .word  cmd
-
-cmd:
-  ; write the file to FILELOAD
-  lda #>FILELOAD
-  sta fileop_ptr+1
-  lda #FILELOAD
-  sta fileop_ptr
-
-  ; load the file
-  jsr expect_filename
-  jsr get_fileid
-  pha
-  jsr get_disk
-  pla
-  jsr read_file
-
-  ; go to the start of the file 
-  lda #>FILELOAD
-  sta addr+1
-  lda #FILELOAD
-  sta addr
-
-  ; run the commands
-  jsr cmd_file
-  rts
 
 drv:
   ; store the old disk in case the verification fails
   lda disk
   pha
   jsr chdisk
-  jsr get_disk
   jsr verify_disk
   pla
   bcs _dsk_verif_good
@@ -609,9 +587,10 @@ _dsk_verif_good
   rts
 
 ; list the files in the current disk out to the serial port
-; expects: addr to hold the address of the current disk
+; expects:
 ; modifies: a, x, y
 lst:
+  jsr get_disk
   ldx #32
 _list_loop:
   jsr print_file
@@ -662,10 +641,6 @@ out:
 
   ; read file starting at give sector
   jsr expect_filename
-  jsr get_fileid
-  pha
-  jsr get_disk
-  pla
   jsr read_file
 
   lda #>FILELOAD
@@ -698,10 +673,6 @@ run:
 
   ; read file starting at given sector
   jsr expect_filename
-  jsr get_fileid
-  pha
-  jsr get_disk
-  pla
   jsr read_file
 
   ; actually run the file
@@ -775,6 +746,26 @@ hex_byte:
   tay ; but the hex char for the LSN in y
 
   rts
+; print the a register as hex:
+; modifies: 
+print_byte:
+  pha
+  txa
+  pha
+  tya
+  pha
+  jsr hex_byte
+  cpx #"0"
+  beq _print_byte_skip_leading_zero
+  stx SERIAL
+_print_byte_skip_leading_zero:
+  sty SERIAL
+  pla
+  tay
+  pla
+  tax
+  pla
+  rts
 
 ; expect a key and return (in a) the value of a single hex char
 ; modifies: a (duh)
@@ -791,6 +782,7 @@ _get_nibble_digit:
 
 ; wait for a key and return (in a) the value of a byte (2 hex chars)
 ; modifies: a (duh)
+expect_byte:
 get_byte:
   ; get the MS nibble and move it to the MS area of the a reg
   jsr get_nibble
@@ -885,17 +877,19 @@ loading_file:
 
 
   .org $ff00
-                     ; filesystem
-  jmp get_disk     ; sys00
-  jmp get_sector   ; sys03
-  jmp get_fileid   ; sys06
-  jmp read_file    ; sys09
-  jmp check_eof    ; sys0c
-  jmp inc_addr     ; sys0f
-                     ; system commands
-  jmp run_command  ; sys12
-                     ; input helpers
-  jmp get_line     ; sys15
+                      ; filesystem
+  jmp read_file       ; sys00
+  jmp check_eof       ; sys03
+  jmp inc_addr        ; sys06
+                      ; dos commands
+  jmp run_command     ; sys09
+                      ; i/o helpers
+  jmp print           ; sys0c
+  jmp print_byte      ; sys0f
+  jmp get_line        ; sys12
+  jmp expect_filename ; sys15
+  jmp expect_key      ; sys18
+  jmp expect_byte     ; sys1b
   ; TODO: add versions of expect_* that don't fail back to the mainloop
 
   ; exit vector

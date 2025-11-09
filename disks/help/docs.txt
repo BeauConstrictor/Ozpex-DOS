@@ -17,67 +17,17 @@ breaking changes.
 
 Paste this into your assembly code to get a reference to all the system calls:
 
-get_disk    = $FF00
-get_sector  = $FF03
-get_fileid  = $FF06
-read_file   = $FF09
-check_eof   = $FF0C
-inc_addr    = $FF0F
-run_command = $FF12
-cmd_file    = $FF15
-get_line    = $FF18
-
-| GET DISK
-
-The syscall get_disk (SYS00) is used to move to the start of the current drive,
-by storing the address of the active drive to $01 & $02.
-
-| GET SECTOR
-
-The syscall get_sector (SYS03) is quite low-level, and you should avoid using it
-in most situations. The subroutine expects you to have already called get_disk
-to move to the start of the active disk, and will move to the sector on disk
-identified by the A register.
-
-| GET FILEID
-
-The syscall get_fileid (SYS06) will return (in A) the index of the first sector
-that contains data for the filename & extension stored between $18 & $26
-(inclusive).
-
-| READ FILE
-
-The syscall read_file (SYS09) takes (in A) the id of the first sector to read
-for a file's data. It will then sequentially data and copy it over to a block of
-memory starting at the address pointed to by $01-$02. It will then leave $14-$15
-pointing to the end of the file's data that it read.
-
-Note that the pointer $01-02 will be disrupted by this system call, so you must
-set it again if you want to use it to then read the loaded contents.
-
-| CHECK EOF
-
-The syscall check_eof (SYS0C) will leave the carry flag set if the pointers 
-01-$02 and $14-$15 are equal, and leave it clear if not. This subroutine makes
-it trivial to loop over the entire contents of a file and parse it by
-incrementing $01-02 as you go using inc_addr (SYS0F).
-
-| INC ADDR
-
-The syscall inc_addr (SYS0F) will increment the pointer $01-02 to make it easier
-to loop over the contents of a file once it has been loaded.
-
-| RUN COMMAND
-
-The syscall run_command (SYS12) will treat the null-terminated string starting
-at $0200 as a command to run. It will be treated in the same way as when you run
-a command from the DOS command line.
-
-note that the command string cannot exceed 256 bytes in length.
-
-| GET LINE
-
-The syscall get_line (SYS15) will wait for the user to type a single line of
-input and end it with a newline (this will not appear in the output). This
-string will be written to $0200 and will not exceed $02ff. The string is
-null-terminated.
+; filesystem
+read_file       = $ff00
+check_eof       = $ff03
+inc_addr        = $ff06
+; command line
+run_command     = $ff09
+; outut
+print           = $ff0c
+print_byte      = $ff0f
+; input (if these fail, program exits)
+get_line        = $ff12
+expect_filename = $ff15
+expect_key      = $ff18
+expect_byte     = $ff1b
