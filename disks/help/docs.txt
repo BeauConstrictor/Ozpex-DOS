@@ -75,14 +75,9 @@ a command from the DOS command line.
 
 note that the command string cannot exceed 256 bytes in length.
 
-| CMD FILE
-
-The syscall cmd_file (SYS15) will run a series of commands from memory,
-each terminated by a newline. The first command is pointed to by $01-02.
-
 | GET LINE
 
-The syscall get_line (SYS18) will wait for the user to type a single line of
+The syscall get_line (SYS15) will wait for the user to type a single line of
 input and end it with a newline (this will not appear in the output). This
 string will be written to $0200 and will not exceed $02ff. The string is
 null-terminated.

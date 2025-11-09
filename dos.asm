@@ -304,44 +304,6 @@ _dispatch_loop_done:
 _dispatch_loop_fail:
   jmp bad_handler
 
-; run a .cmd file
-; expects: a file of commands to be pointed to by addr
-; modifies: TODO:
-cmd_file_line:
-  lda #0
-  sta input_ptr
-  ldx #0
-_cmd_file_line_loop:
-  ldy #0
-  lda (addr),y
-  sta SERIAL
-  cmp #"\n"
-  beq _cmd_file_line_done
-  cmp #" "
-  beq _cmd_file_line_ignore
-  sta input_buf,x
-  inx
-  jsr inc_addr
-  jmp _cmd_file_line_loop
-_cmd_file_line_done:
-  ; end the command
-  lda #0
-  sta input_buf,x
-  
-  ; run the command
-  jsr run_command
-  jsr inc_addr
-  rts
-_cmd_file_line_ignore:
-  jsr inc_addr
-  jmp _cmd_file_line_loop
-
-cmd_file:
-  jsr cmd_file_line
-  jsr check_eof
-  ; bcc cmd_file
-  rts
-
 ; show the user's disk, prompting for input
 ; modifies: a
 show_prompt:
@@ -932,9 +894,8 @@ loading_file:
   jmp inc_addr     ; sys0f
                      ; system commands
   jmp run_command  ; sys12
-  jmp cmd_file     ; sys15
                      ; input helpers
-  jmp get_line     ; sys18
+  jmp get_line     ; sys15
   ; TODO: add versions of expect_* that don't fail back to the mainloop
 
   ; exit vector
