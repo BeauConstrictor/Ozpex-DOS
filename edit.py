@@ -12,6 +12,8 @@ m_cmd    = 0
 m_insert = 1
 mode     = 0
 
+ROWS = 40
+
 if sys.platform.startswith("win"):
     import msvcrt
 
@@ -50,13 +52,20 @@ def draw() -> None:
         print("--- insert mode ---\n")
     
     scroll_count = scroll
+    newlines = 0
+    
     for ch in before:
         if ch == "\n" and scroll_count != 0:
             scroll_count -= 1
             continue
         if scroll_count != 0:
             continue
+        if ch == "\n":
+            newlines += 1
+            if newlines > ROWS:
+                return
         print(ch, end="")
+        
     print("\033[7m", end="")
     if after[0] == "\n":
         print(" ", end="")
@@ -64,11 +73,16 @@ def draw() -> None:
     else:
         print(after[0], end="")
     print("\033[0m", end="")
+    
     for ch in after[1:]:
         if ch == "\n" and scroll_count != 0:
             scroll_count -= 1
         if scroll_count != 0:
             continue
+        if ch == "\n":
+            newlines += 1
+            if newlines > ROWS:
+                return
         print(ch, end="")
 
 def key_cmd() -> None:
