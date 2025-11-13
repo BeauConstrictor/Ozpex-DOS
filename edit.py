@@ -16,7 +16,7 @@ newlines = 0 # can be undefined in the asm
 scroll_count = 0 # can be undefined in the asm
 ch = ""  # can be undefined in the asm
 
-ROWS = 25
+ROWS = 7
 
 if sys.platform.startswith("win"):
     import msvcrt
@@ -72,12 +72,20 @@ def print_char() -> None:
     print(ch, end="")
 
 def print_cursor() -> None:
-    print("\033[7m", end="")
+    global scroll_count
+    global newlines
+    
+    if len(after) == 0:
+        print("█", end="")
+        return
     if after[0] == "\n":
-        print(" ", end="")
-        print("\n", end="")
-    else:
-        print(after[0], end="")
+        newlines += 1
+        if scroll_count != 0: scroll_count -= 1
+        print("█")
+        return
+
+    print("\033[7m", end="")
+    print(after[0], end="")
     print("\033[0m", end="")
 
 def draw() -> None:
@@ -85,7 +93,7 @@ def draw() -> None:
     global scroll_count
     global newlines
     
-    print("\033[H\033[J\033[3J")
+    print("\033[2J\033[H")
     
     draw_header()
     
@@ -120,14 +128,17 @@ def key_cmd() -> None:
         scroll += 1
         return
     if key == "K":
+        if scroll == 0: return
         scroll -= 1
         return
     
     if key == "h":
+        if len(before) == 0: return
         after = before[-1] + after
         before = before[:-1]
         return
     if key == "l":
+        if len(after) == 1: return
         before = before + after[0]
         after = after[1:]
         return
