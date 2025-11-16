@@ -864,12 +864,12 @@ hlp_msg:
   .byte "drv: Switch between drive A, B and T.\n", 0
 hlp_msg_2: 
   .byte "run: Execute a .prg program.\n"
-  .byte "out: Output the contents of a text file.\n"
+  .byte "out: Output the contents of a text file.\n", 0
 hlp_msg_3:
   .byte "cls: Clear the screen.\n"
   .byte "hlp: Display this help message.\n"
   .byte "usg: Check how much of a drive is in use.\n"
-  .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n"
+  .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n", 0
 
 err_msg:
   .byte "\n"
