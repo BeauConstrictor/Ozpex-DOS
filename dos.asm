@@ -33,17 +33,16 @@ input_buf    = $0200  ; 256 B;  null-terminated
 input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
 reset:
-  ; start on disk T
   lda #T
   sta disk
-
-  ; format the temp disk
   jsr fmt_disk
 
-  lda #welcome_msg
-  sta PRINT
+  jsr switch_to_good_disk
+
   lda #>welcome_msg
   sta PRINT+1
+  lda #<welcome_msg
+  sta PRINT
   jsr print
 
 mainloop:
@@ -66,7 +65,7 @@ get_disk:
   lda disk                   ; check which disk is active
   cmp #A
   bne _get_sector_not_disk_a ; if it's not a, handle that
-  lda #DISKA                 ; otherwise, load disk a's addr
+  lda #<DISKA                 ; otherwise, load disk a's addr
   sta addr                   ; ^
   lda #>DISKA                ; ^
   sta addr+1                 ; ^
@@ -75,14 +74,14 @@ get_disk:
 _get_sector_not_disk_a:
   cmp #B
   bne _get_sector_not_disk_b ; if it's not b, handle that (its t)
-  lda #DISKB                 ; load disk b's addr
+  lda #<DISKB                 ; load disk b's addr
   sta addr                   ; ^
   lda #>DISKB                ; ^
   sta addr+1                 ; ^
   pla
   rts                        ; return
 _get_sector_not_disk_b:
-  lda #DISKT                 ; load disk t's addr
+  lda #<DISKT                 ; load disk t's addr
   sta addr                   ; ^
   lda #>DISKT                ; ^
   sta addr+1                 ; ^
@@ -279,6 +278,26 @@ verify_disk:
   rts
 _verify_disk_fail:
   clc
+  rts
+
+; switch to the first valid filesystem in the order a, b, t
+; modifies:
+switch_to_good_disk:
+  ; switch the disk a
+  lda #A
+  sta disk
+  ; and verify it
+  jsr verify_disk
+  bcs _switch_to_good_disk_found
+  ; it there was no valid filesystem, try disk b
+  lda #B
+  sta disk
+  jsr verify_disk
+  bcs _switch_to_good_disk_found
+  ; if that didn't work either, fall back to the temp disk
+  lda #T
+  sta disk
+_switch_to_good_disk_found:
   rts
 
 ; ---------- ;
@@ -578,7 +597,7 @@ drv:
   pla
   bcs _dsk_verif_good
   sta disk
-  lda #unfmted_msg
+  lda #<unfmted_msg
   sta PRINT
   lda #>unfmted_msg
   sta PRINT+1
@@ -625,7 +644,7 @@ _usg_not_used:
   stx SERIAL
 _usg_skip_leading_zero:
   sty SERIAL
-  lda #usg_msg
+  lda #<usg_msg
   sta PRINT
   lda #>usg_msg
   sta PRINT+1
@@ -636,7 +655,7 @@ out:
   ; write the file to FILELOAD
   lda #>FILELOAD
   sta fileop_ptr+1
-  lda #FILELOAD
+  lda #<FILELOAD
   sta fileop_ptr
 
   ; read file starting at give sector
@@ -645,7 +664,7 @@ out:
 
   lda #>FILELOAD
   sta addr+1
-  lda #FILELOAD
+  lda #<FILELOAD
   sta addr
 
   ldy #0
@@ -668,7 +687,7 @@ run:
   ; write the file to FILELOAD
   lda #>FILELOAD
   sta fileop_ptr+1
-  lda #FILELOAD
+  lda #<FILELOAD
   sta fileop_ptr
 
   ; read file starting at given sector
@@ -680,17 +699,17 @@ run:
   rts
 
 hlp:
-  lda #hlp_msg
+  lda #<hlp_msg
   sta PRINT
   lda #>hlp_msg
   sta PRINT+1
   jsr print
-  lda #hlp_msg_2
+  lda #<hlp_msg_2
   sta PRINT
   lda #>hlp_msg_2
   sta PRINT+1
   jsr print
-  lda #hlp_msg_3
+  lda #<hlp_msg_3
   sta PRINT
   lda #>hlp_msg_3
   sta PRINT+1
@@ -817,7 +836,7 @@ _print_done:
 
 ; its easy to just jump here if there is an error
 bad_handler:
-  lda #err_msg
+  lda #<err_msg
   sta PRINT
   lda #>err_msg
   sta PRINT+1
