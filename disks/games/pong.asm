@@ -22,6 +22,12 @@ score     = $37 ; 1 byte
 PRINT     = $38 ; 2 bytes
 
 main:
+  lda #>hide_cursor
+  sta PRINT+1
+  lda #<hide_cursor
+  sta PRINT
+  jsr print
+
   lda #7
   sta player
   sta ballx
@@ -55,7 +61,7 @@ loop:
 
 exit:
   jsr draw
-  lda #exit_message
+  lda #<exit_message
   sta PRINT
   lda #>exit_message
   sta PRINT + 1
@@ -68,6 +74,11 @@ _exit_loop:
   bne _exit_loop
   lda #CLEAR
   sta SERIAL
+  lda #>show_cursor
+  sta PRINT+1
+  lda #<show_cursor
+  sta PRINT
+  jsr print
   jmp (EXIT_VEC)
 _exit_restart:
   jmp main
@@ -121,7 +132,7 @@ _collide_not_top:
 
 draw:
   ; print the score message
-  lda #score_message
+  lda #<score_message
   sta PRINT
   lda #>score_message
   sta PRINT + 1
@@ -139,7 +150,7 @@ _draw_skip_leading_zero:
 
   ldy #0
 _draw_y_loop:
-  lda #line_start
+  lda #<line_start
   sta PRINT
   lda #>line_start
   sta PRINT + 1
@@ -151,7 +162,7 @@ _draw_x_loop:
   bne _draw_dont_print_ball
   cpy bally
   bne _draw_dont_print_ball
-  lda #ball
+  lda #<ball
   sta PRINT
   lda #>ball
   sta PRINT + 1
@@ -190,7 +201,7 @@ _draw_x_loop_next:
   cpx #16
   bne _draw_x_loop
 
-  lda #line_trail
+  lda #<line_trail
   sta PRINT
   lda #>line_trail
   sta PRINT + 1
@@ -316,3 +327,8 @@ exit_message:
   .byte 0
 ball:
   .byte "##", 0
+
+hide_cursor:
+  .byte "\e[?25l", 0
+show_cursor:
+  .byte "\e[?25h", 0
