@@ -865,15 +865,11 @@ hlp_msg:
 hlp_msg_2: 
   .byte "run: Execute a .prg program.\n"
   .byte "out: Output the contents of a text file.\n"
-  .byte "del: Delete a file.\n"
-  .byte "cpy: Copy a file onto the same drive.\n"
-  .byte "dcp: Copy a file to another drive.\n", 0
 hlp_msg_3:
   .byte "cls: Clear the screen.\n"
   .byte "hlp: Display this help message.\n"
   .byte "usg: Check how much of a drive is in use.\n"
   .byte "fmt: Format a blank drive with for use with Ozpex DOS.\n"
-  .byte "cmd: Run a file filled with DOS commands.\n", 0
 
 err_msg:
   .byte "\n"
