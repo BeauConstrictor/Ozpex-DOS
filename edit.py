@@ -16,7 +16,7 @@ newlines = 0 # can be undefined in the asm
 scroll_count = 0 # can be undefined in the asm
 ch = ""  # can be undefined in the asm
 
-ROWS = 7
+ROWS = 30
 
 if sys.platform.startswith("win"):
     import msvcrt
@@ -75,9 +75,6 @@ def print_cursor() -> None:
     global scroll_count
     global newlines
     
-    if len(after) == 0:
-        print("█", end="")
-        return
     if after[0] == "\n":
         newlines += 1
         if scroll_count != 0: scroll_count -= 1
@@ -184,8 +181,8 @@ def main() -> None:
         handle_key()
 
 if __name__ == "__main__":
-    # with open("disks/devkit/monitor.asm", "r") as f:
-    #     before = f.read()
-    #     scroll = len(before.split("\n")) - ROWS
+    with open("disks/devkit/monitor.asm", "r") as f:
+        before = f.read()
+        scroll = len(before.split("\n")) - ROWS
         
     main()
