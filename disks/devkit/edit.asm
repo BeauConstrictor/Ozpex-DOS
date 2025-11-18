@@ -34,6 +34,8 @@ CLEAR                = $11
 NORMAL               =   0
 INSERT               =   1
 ROWS                 =  30
+
+DELETE               = 127
 ; ---------------------- ;
 
 main:
@@ -81,33 +83,59 @@ handle_key:
 ; expects the last key that was pressed to be in a
 key_insert:
   cmp #"\e"
-  bne _key_insert_not_esc
-  lda #NORMAL
-  sta mode
-  rts
-_key_insert_not_esc:
+  beq _key_insert_esc
+  cmp #"\b"
+  beq _key_insert_backspace
+  cmp #DELETE
+  beq _key_insert_backspace ; some terminals will send this instead
+
   ldy #0
   sta (gapstart),y
   inc gapstart
+  bne _key_insert_done
+  inc gapstart+1
+_key_insert_done:
+  rts
+_key_insert_esc
+  lda #NORMAL
+  sta mode
+  rts
+_key_insert_backspace:
+  lda gapstart
+  bne _key_insert_backspace_no_carry
+  dec gapstart
+_key_insert_backspace_no_carry:
+  dec gapstart
   rts
 
 ; expects the last key that was pressed to be in a
 key_normal:
   cmp #"q"
-  bne _key_normal_not_q
+  beq _key_normal_q
+  cmp #"i"
+  beq _key_normal_i
+  cmp #"l"
+  beq _key_normal_l
+  rts
+_key_normal_q:
   lda #>show_cursor
   sta PRINT+1
   lda #<show_cursor
   sta PRINT
   jsr print
   jmp (EXIT)
-_key_normal_not_q:
-  cmp #"i"
-  bne _key_normal_not_i
+_key_normal_i:
   lda #INSERT
   sta mode
   rts
-_key_normal_not_i:
+_key_normal_l:
+  ldy #0
+  lda (aftergap),y
+  sta (gapstart),y
+  inc gapstart
+  bne _key_normal_done
+  inc gapstart+1
+_key_normal_done:
   rts
 
 draw_header:
