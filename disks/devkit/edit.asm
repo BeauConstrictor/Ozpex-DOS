@@ -4,6 +4,7 @@
 SERIAL             = $8002
 EXIT               = $fff8  
 bufstart           = $3000
+bufend             = $7fff
 ; ---------------------- ;
 
 ; ------ syscalls ------ ;
@@ -116,8 +117,13 @@ key_normal:
   beq _key_normal_i
   cmp #"l"
   beq _key_normal_l
+  cmp #"h"
+  beq _key_normal_h
   rts
 _key_normal_q:
+  lda #"\n"
+  sta SERIAL
+  sta SERIAL
   lda #>show_cursor
   sta PRINT+1
   lda #<show_cursor
@@ -133,10 +139,36 @@ _key_normal_l:
   lda (aftergap),y
   sta (gapstart),y
   inc gapstart
-  bne _key_normal_done
+  bne _key_normal_gapstart_no_carry
   inc gapstart+1
-_key_normal_done:
+_key_normal_gapstart_no_carry:
+  inc aftergap
+  bne _key_normal_l_aftergap_no_carry
+  inc aftergap+1
+_key_normal_l_aftergap_no_carry:
   rts
+_key_normal_h:
+  ldy #$ff
+  dec gapstart+1
+  lda (gapstart),y
+  inc gapstart+1
+  dec aftergap+1
+  sta (aftergap),y
+  inc aftergap+1
+
+  dec aftergap
+  lda aftergap
+  cmp #$ff
+  bne _key_normal_h_aftergap_no_carry
+  dec aftergap+1
+_key_normal_h_aftergap_no_carry:
+  dec gapstart
+  lda gapstart
+  cmp #$ff
+  bne _key_normal_h_gapstart_no_carry
+  dec gapstart+1
+_key_normal_h_gapstart_no_carry:
+  rts  
 
 draw_header:
   lda #>header
@@ -240,23 +272,45 @@ _draw_before_loop_skip:
   ; in between the text before the cursor and the text after the cursor
   jsr draw_cursor
 
-  ; we have already done a ldy #0
   lda aftergap+1
-  sta bufidx+1
+  cmp #>bufend
+  bne _draw_after_loop_do
   lda aftergap
+  cmp #<bufend
+  bne _draw_after_loop_do
+  jmp _draw_after_loop_skip
+_draw_after_loop_do:
+  lda #>aftergap
+  sta bufidx+1
+  lda #<aftergap
   sta bufidx
+  ldy #0
 _draw_after_loop:
-  lda (bufidx),Y
+  lda (bufidx),y
   sta ch
-  lda bufidx+1
-  cmp aftergap+1
-  bne _draw_after_loop_done
+  sta SERIAL
+  jsr inc_bufidx
+  ; check if we are now at the start of the gap
+  lda aftergap+1
+  cmp bufidx+1
+  bne _draw_after_loop
   lda aftergap
   cmp bufidx
-  bne _draw_after_loop_done
-  jsr inc_bufidx
+  bne _draw_after_loop
+_draw_after_loop_skip:
+
+  ; check if we reached the end of the buffer
+  lda bufidx+1
+  cmp #>bufend
+  bne _draw_after_loop_not_done
+  lda bufidx
+  cmp #<bufend
+  beq _draw_after_loop_done
+_draw_after_loop_not_done:
   jmp _draw_after_loop
+
 _draw_after_loop_done:
+  rts
 
   rts
 
