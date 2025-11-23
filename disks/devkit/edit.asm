@@ -1,4 +1,4 @@
-  .org $0400
+  .org $0300
 
 ; ----- memory map ----- ;
 SERIAL             = $8002
@@ -308,10 +308,7 @@ _draw_after_loop_skip:
   beq _draw_after_loop_done
 _draw_after_loop_not_done:
   jmp _draw_after_loop
-
 _draw_after_loop_done:
-  rts
-
   rts
 
 inc_bufidx:
