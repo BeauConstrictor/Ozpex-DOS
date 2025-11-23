@@ -5,6 +5,7 @@ SERIAL             = $8002
 EXIT               = $fff8  
 bufstart           = $3000
 bufend             = $7fff
+bufend_plus_one    = $8000
 ; ---------------------- ;
 
 ; ------ syscalls ------ ;
@@ -27,7 +28,6 @@ aftergap       = $4a ; 2 B
 
 bufidx         = $4c ; 2 B
 ; ---------------------- ;
-
 
 ; ------- consts ------- ;
 CLEAR                = $11
@@ -257,7 +257,6 @@ _draw_before_loop_do:
   ldy #0
 _draw_before_loop:
   lda (bufidx),y
-  sta ch
   sta SERIAL
   jsr inc_bufidx
   ; check if we are now at the start of the gap
@@ -280,35 +279,24 @@ _draw_before_loop_skip:
   bne _draw_after_loop_do
   jmp _draw_after_loop_skip
 _draw_after_loop_do:
-  lda #>aftergap
+  lda aftergap+1
   sta bufidx+1
-  lda #<aftergap
+  lda aftergap
   sta bufidx
+  jsr inc_bufidx
   ldy #0
 _draw_after_loop:
   lda (bufidx),y
-  sta ch
   sta SERIAL
   jsr inc_bufidx
-  ; check if we are now at the start of the gap
-  lda aftergap+1
-  cmp bufidx+1
+  ; check if we are now at the end of the buffer
+  lda bufidx+1
+  cmp #>bufend_plus_one
   bne _draw_after_loop
-  lda aftergap
-  cmp bufidx
+  lda bufidx
+  cmp #<bufend_plus_one
   bne _draw_after_loop
 _draw_after_loop_skip:
-
-  ; check if we reached the end of the buffer
-  lda bufidx+1
-  cmp #>bufend
-  bne _draw_after_loop_not_done
-  lda bufidx
-  cmp #<bufend
-  beq _draw_after_loop_done
-_draw_after_loop_not_done:
-  jmp _draw_after_loop
-_draw_after_loop_done:
   rts
 
 inc_bufidx:
