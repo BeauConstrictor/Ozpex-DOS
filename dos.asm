@@ -625,6 +625,7 @@ _list_didnt_carry:
   rts
 
 usg:
+  jsr get_disk
   lda #02           ; go to sector two (usage info)
   jsr get_sector    ; ^
   ldx #00           ; start disk usage at zero
