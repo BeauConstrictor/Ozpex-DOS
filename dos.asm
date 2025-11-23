@@ -852,7 +852,7 @@ bad_handler:
 
 welcome_msg:
   .byte CLEAR
-  .byte "**** Ozpex DOS v0.4.4 ****\n"
+  .byte "**** Ozpex DOS v0.5.0 ****\n"
   .byte "Temp disk ready.\n\n"
 
   .byte "Type 'hlp' for help.\n\n"
