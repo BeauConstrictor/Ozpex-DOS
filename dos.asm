@@ -13,8 +13,8 @@ T         = 2
 SERIAL   = $8002
 DISKA    = $8003
 DISKB    = $a003
-DISKT    = $2400
-FILELOAD = $0400
+DISKT    = $2300
+FILELOAD = $0300
 
 ; ----------------- ;
 ; memory allocation ;
@@ -29,8 +29,8 @@ fileop_ptr   =   $14  ;   2 B;  pointer used for file reads and writes
 BYTE_BUILD   =   $16  ;   2 B;  used when reading in hex bytes
 filename     =   $18  ;  15 B;  filename after its length has been normalised
 fname_left   =   $27  ;   1 B;  how many more chars are needed for a full filename
+input_ptr    =   $28  ;   1 B;  where parsing commands should read from
 input_buf    = $0200  ; 256 B;  null-terminated
-input_ptr    = $01ff  ;   1 B;  where parsing commands should read from
 
 reset:
   lda #T
@@ -465,6 +465,8 @@ get_fileid:
   jsr get_disk
 
 _get_fileid_loop:
+  ; TODO: add handling for if the file just doesn't exist (sec)
+
   ; check the file for a match
   jsr _get_fileid_match
   beq _get_fileid_matched
@@ -489,8 +491,6 @@ _get_fileid_matched:
   ldy #15
   lda (addr),y
   rts
-
-  jsr inc_addr
 
 _get_fileid_match:
   ldx #15
