@@ -1,0 +1,6 @@
+{
+    "Name": "Ozpex DOS",
+    "ROM": "build/rom.bin",
+    "Cartridge A": "bbram:build/help.img",
+    "Cartridge B": "bbram:build/games.img"
+}
