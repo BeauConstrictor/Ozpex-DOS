@@ -81,3 +81,30 @@ The sector can fit 32 entries, but only 29 files can exist (as there are only
 
 You can achieve other operations such as copying, overwriting and moving files
 between disks by combining these operations.
+
+MEMORY MAP
+
+This section shows how different areas of memory are utilised by the operating
+system.
+
+| RAM
+
+0x0000 - 0x00ff = zero page        ( 256  B )
+0x0100 - 0x01ff = hardware stack   ( 256  B )
+0x0200 - 0x02ff = string buffer    ( 256  B )
+0x0300 - 0x22ff = program          ( 8    K )
+0x2300 - 0x42ff = ram disk         ( 8    K )
+0x4300 - 0x7fff = free memory      ( ~14  K )
+
+| I/O
+0x8000          = serial port
+0x8001 - 0x8002 = hardware timer
+
+| DRIVE A
+0x8003 - 0xa002                    ( 8    K )
+
+| DRIVE B
+0xa003 - 0xc002                    ( 8    K )
+
+| ROM
+0xc003 - 0xffff                    ( ~14  K )

@@ -2,31 +2,42 @@
 
 ; ----- memory map ----- ;
 SERIAL             = $8002
-EXIT               = $fff8  
-bufstart           = $3000
+EXIT               = $fff8
+
+; TODO:  sort  this   out,
+; currently the gap buffer
+; is  28 bytes short of  a
+; max      size       file
+filebuf            = $4300
+bufstart           = $6300
 bufend             = $7fff
 bufend_plus_one    = $8000
 ; ---------------------- ;
 
 ; ------ syscalls ------ ;
+read_file          = $ff00
 print              = $ff0c
+expect_filename    = $ff15
 ; ---------------------- ;
 
 ; ----- allocation ----- ;
-PRINT          = $05 ; 2 B
+ADDR          = $01 ; 2  B
+PRINT         = $05 ; 2  B
+FILE_PTR      = $14 ; 2  B
+FILENAME      = $18 ; 15 B
 
-scroll         = $40 ; 2 B
+scroll        = $40 ; 2  B
 
-mode           = $42 ; 1 B
+mode          = $42 ; 1  B
 
-newlines       = $43 ; 2 B
-scroll_count   = $45 ; 2 B
-ch             = $47 ; 1 B
+newlines      = $43 ; 2  B
+scroll_count  = $45 ; 2  B
+ch            = $47 ; 1  B
 
-gapstart       = $48 ; 2 B
-aftergap       = $4a ; 2 B
+gapstart      = $48 ; 2  B
+aftergap      = $4a ; 2  B
 
-bufidx         = $4c ; 2 B
+bufidx        = $4c ; 2  B
 ; ---------------------- ;
 
 ; ------- consts ------- ;
@@ -40,11 +51,25 @@ DELETE               = 127
 ; ---------------------- ;
 
 main:
-  ; before = ""
+  jsr expect_filename
+
   lda #>bufstart
-  sta gapstart+1
+  sta FILE_PTR+1
   lda #<bufstart
+  sta FILE_PTR
+
+  jsr read_file
+
+  lda FILE_PTR+1
+  sta gapstart+1
+  lda FILE_PTR
   sta gapstart
+
+  ; ; before = ""
+  ; lda #>bufstart
+  ; sta gapstart+1
+  ; lda #<bufstart
+  ; sta gapstart
 
   ; after = "\n"
   lda #>$7fff
@@ -66,10 +91,12 @@ main:
   lda #<cursor_off
   sta PRINT
   jsr print
+
 mainloop:
   jsr draw
   jsr handle_key
   jsr mainloop
+
 
 handle_key:
   lda SERIAL
@@ -170,6 +197,7 @@ _key_normal_h_aftergap_no_carry:
 _key_normal_h_gapstart_no_carry:
   rts  
 
+
 draw_header:
   lda #>header
   sta PRINT+1
@@ -234,7 +262,7 @@ draw:
   jsr draw_header
 
   ; scroll_count = scroll
-  lda #scroll
+  lda scroll
   sta scroll_count
   ; newlines = 0
   lda #0
@@ -299,11 +327,94 @@ _draw_after_loop:
 _draw_after_loop_skip:
   rts
 
+
+write:
+  lda filebuf+1
+  sta ADDR+1
+  sta FILE_PTR+1
+  lda filebuf
+  sta ADDR
+  sta FILE_PTR
+
+  ; if the first character in the gap is the start of the buffer, then we
+  ; shouldn't write anything
+  lda gapstart+1
+  cmp #>bufstart
+  bne _write_before_loop_do
+  lda gapstart
+  cmp #<bufstart
+  bne _write_before_loop_do
+  jmp _write_before_loop_skip
+_write_before_loop_do:
+  lda #>bufstart
+  sta bufidx+1
+  lda #<bufstart
+  sta bufidx
+  ldy #0
+_write_before_loop:
+  lda (bufidx),y
+  sta (FILE_PTR),y
+  jsr inc_bufidx
+  jsr inc_file_ptr
+  ; check if we are now at the start of the gap
+  lda gapstart+1
+  cmp bufidx+1
+  bne _write_before_loop
+  lda gapstart
+  cmp bufidx
+  bne _write_before_loop
+_write_before_loop_skip:
+
+  lda aftergap+1
+  cmp #>bufend
+  bne _write_after_loop_do
+  lda aftergap
+  cmp #<bufend
+  bne _write_after_loop_do
+  jmp _write_after_loop_skip
+_write_after_loop_do:
+  lda aftergap+1
+  sta bufidx+1
+  lda aftergap
+  sta bufidx
+  jsr inc_bufidx
+  ldy #0
+_write_after_loop:
+  lda (bufidx),y
+  sta (FILE_PTR),y
+  jsr inc_bufidx
+  jsr inc_file_ptr
+  ; check if we are now at the end of the buffer
+  lda bufidx+1
+  cmp #>bufend_plus_one
+  bne _write_after_loop
+  lda bufidx
+  cmp #<bufend_plus_one
+  bne _write_after_loop
+_write_after_loop_skip:
+
+  ; jsr delete_file ; using the filename we expected right at the start
+
+  ; ; by this point, addr will point to the start of the file (we never move it),
+  ; ; file_ptr will point to the first byte after the file and
+  ; ; filename will contain the filename to write to (set at program start).
+  ; jsr new_file
+  rts
+
+
 inc_bufidx:
   inc bufidx
   bne _inc_bufidx_no_carry
   inc bufidx+1
 _inc_bufidx_no_carry:
+  rts
+
+
+inc_file_ptr:
+  inc FILE_PTR
+  bne _inc_file_ptr_no_carry
+  inc FILE_PTR+1
+_inc_file_ptr_no_carry:
   rts
 
 
