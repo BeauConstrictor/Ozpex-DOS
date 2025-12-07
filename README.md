@@ -21,7 +21,7 @@ $ cd ozpex-dos
 $ ./build/build.sh
 ```
 
-This will download and build Ozpex DOS. After building, you can look in the `./build` directory and you will see a `rom.bin` which is the DOS itself, as well a some `*.img` files which contain filesystem/disk images which can be loaded into the emulator.
+This will download and build Ozpex DOS. After building, you can look in the `./build` directory where you will see a `rom.bin`, which contains the operating system itself, as well a some `*.img` files which contain filesystem images which can be loaded into the emulator.
 
 ```
 $ cd ..
@@ -49,7 +49,7 @@ Because the Ozpex 64 features 2 cartridge slots, which is where Ozpex DOS gets i
 
 Ozpex DOS features a minimal (as-in non-existent) command grammar. There is no system of arguments separated by spaces so spaces anywhere in a command are simply ignored. Specific commands are identified by the first 3 characters of your input and depending on the command being run, you may need to type a filename, drive letter or something else afterward.
 
-This document does not include a list of all commands, as that would be annoying to maintain, so just run the `hlp` command from within DOS to see all of the available commands in your current version.
+This document does not include a list of all commands, as that would be annoying to maintain, so just run the `hlp` command from within DOS to see all the available commands in your current version.
 
 ## Filesystem
 
